@@ -26,4 +26,5 @@ import (
 	_ "k8s.io/kubernetes/pkg/cloudprovider/providers/ovirt"
 	_ "k8s.io/kubernetes/pkg/cloudprovider/providers/photon"
 	_ "k8s.io/kubernetes/pkg/cloudprovider/providers/vsphere"
+	_ "cloud.tencent.com/tencent-cloudprovider/provider"
 )
