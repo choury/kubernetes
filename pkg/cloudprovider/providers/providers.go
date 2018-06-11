@@ -1,5 +1,3 @@
-// +build !providerless
-
 /*
 Copyright 2015 The Kubernetes Authors.
 
@@ -20,6 +18,7 @@ package cloudprovider
 
 import (
 	// Cloud providers
+	_ "cloud.tencent.com/tencent-cloudprovider/provider"
 	_ "k8s.io/legacy-cloud-providers/aws"
 	_ "k8s.io/legacy-cloud-providers/azure"
 	_ "k8s.io/legacy-cloud-providers/gce"
