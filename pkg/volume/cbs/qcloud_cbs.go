@@ -69,7 +69,6 @@ func (plugin *qcloudDiskPlugin) GetVolumeName(spec *volume.Spec) (string, error)
 }
 
 func (plugin *qcloudDiskPlugin) CanSupport(spec *volume.Spec) bool {
-	glog.Infof("checking CanSupport %+v", spec)
 	return (spec.PersistentVolume != nil && spec.PersistentVolume.Spec.QcloudCbs != nil) ||
 		(spec.Volume != nil && spec.Volume.QcloudCbs != nil)
 }
