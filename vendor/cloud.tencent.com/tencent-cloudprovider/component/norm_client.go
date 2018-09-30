@@ -43,6 +43,9 @@ const (
 	NORM_CBS_INTERFACE_QUERY_TASK = "qcloud.cbs.queryTask"
 	NORM_CBS_INTERFACE_LIST_DISK = "qcloud.cbs.ListCbsInstance"
 	NORM_CBS_INTERFACE_RENEW_DISK = "qcloud.cbs.SetCbsAutoRenewFlag"
+
+	ENV_CLUSTER_ID = "CLUSTER_ID"
+	ENV_APP_ID = "APPID"
 )
 
 type NormRequest map[string]interface{}
@@ -91,6 +94,33 @@ func NewNormClient() *NormClient {
 	return c
 }
 
+//从环境变量中获取clusterID和appId放入norm的para中 for meta cluster
+func SetNormReqExt(body []byte) ([]byte) {
+	js, err := simplejson.NewJson(body)
+	if err != nil {
+		glog.Error("SetNormReqExt NewJson error,", err)
+		return nil
+	}
+	if os.Getenv(ENV_CLUSTER_ID) != "" {
+		js.SetPath([]string{"interface", "para", "unClusterId"}, os.Getenv(ENV_CLUSTER_ID))
+		glog.V(4).Info("SetNormReqExt set unClusterId", os.Getenv(ENV_CLUSTER_ID))
+
+	}
+	if os.Getenv(ENV_APP_ID) != "" {
+		js.SetPath([]string{"interface", "para", "appId"}, os.Getenv(ENV_APP_ID))
+		glog.V(4).Info("SetNormReqExt set appId", os.Getenv(ENV_APP_ID))
+
+	}
+
+	out, err := js.Encode()
+	if err != nil {
+		glog.Error("SetNormReqExt Encode error,", err)
+		return body
+	}
+
+	return out
+}
+
 func (c *NormClient) packRequest(interfaceName string, reqObj interface{}) ([]byte, error) {
 	c.request = map[string]interface{}{
 		"eventId":   rand.Uint32(),
@@ -110,6 +140,7 @@ func (c *NormClient) packRequest(interfaceName string, reqObj interface{}) ([]by
 		glog.Error("packRequest failed:", err, ", req:", c.request)
 		return nil, err
 	}
+	b = SetNormReqExt(b)
 	return b, nil
 }
 
@@ -481,6 +512,9 @@ func getStatus(rsp NormCallPassRsp) (status int, e error) {
 
 	return intb.MustInt(-1), nil
 }
+
+
+
 
 
 
