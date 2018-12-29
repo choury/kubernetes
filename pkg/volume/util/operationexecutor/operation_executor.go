@@ -23,6 +23,7 @@ package operationexecutor
 import (
 	"fmt"
 	"time"
+	"strings"
 
 	"github.com/golang/glog"
 
@@ -248,7 +249,7 @@ func generateVolumeMsg(prefixMsg, suffixMsg, volumeName, details string) (simple
 // VolumeToAttach represents a volume that should be attached to a node.
 type VolumeToAttach struct {
 	// MultiAttachErrorReported indicates whether the multi-attach error has been reported for the given volume.
-	// It is used to prevent reporting the error from being reported more than once for a given volume.
+	// It is used to to prevent reporting the error from being reported more than once for a given volume.
 	MultiAttachErrorReported bool
 
 	// VolumeName is the unique identifier for the volume that should be
@@ -943,4 +944,14 @@ func (oe *operationExecutor) CheckVolumeExistenceOperation(
 			checkErr)
 	}
 	return islinkExist, nil
+}
+
+func hasMountRefs(mountPath string, mountRefs []string) bool {
+	count := 0
+	for _, ref := range mountRefs {
+		if !strings.Contains(ref, mountPath) {
+			count = count + 1
+		}
+	}
+	return count > 0
 }

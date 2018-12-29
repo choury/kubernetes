@@ -491,6 +491,7 @@ func (og *operationGenerator) GenerateMountVolumeFunc(
 		fsGroup = volumeToMount.Pod.Spec.SecurityContext.FSGroup
 	}
 
+
 	mountVolumeFunc := func() (error, error) {
 		devicePath := volumeToMount.DevicePath
 		if volumeAttacher != nil {
@@ -667,8 +668,15 @@ func (og *operationGenerator) GenerateUnmountVolumeFunc(
 	actualStateOfWorld ActualStateOfWorldMounterUpdater,
 	podsDir string) (volumetypes.GeneratedOperations, error) {
 	// Get mountable plugin
+	pluginName := ""
+	if strings.Contains(string(volumeToUnmount.VolumeName), "cloud.tencent.com/qcloud-cbs") {
+		pluginName = "cloud.tencent.com/qcloud-cbs"
+	} else {
+		pluginName = volumeToUnmount.PluginName
+	}
+
 	volumePlugin, err :=
-		og.volumePluginMgr.FindPluginByName(volumeToUnmount.PluginName)
+		og.volumePluginMgr.FindPluginByName(pluginName)
 	if err != nil || volumePlugin == nil {
 		return volumetypes.GeneratedOperations{}, volumeToUnmount.GenerateErrorDetailed("UnmountVolume.FindPluginByName failed", err)
 	}
@@ -738,27 +746,30 @@ func (og *operationGenerator) GenerateUnmountDeviceFunc(
 		return volumetypes.GeneratedOperations{}, deviceToDetach.GenerateErrorDetailed("UnmountDevice.NewDeviceUmounter failed", err)
 	}
 
-	volumeDeviceMounter, err := deviceMountableVolumePlugin.NewDeviceMounter()
-	if err != nil {
-		return volumetypes.GeneratedOperations{}, deviceToDetach.GenerateErrorDetailed("UnmountDevice.NewDeviceMounter failed", err)
-	}
-
 	unmountDeviceFunc := func() (error, error) {
-		//deviceMountPath := deviceToDetach.DeviceMountPath
-		deviceMountPath, err :=
-			volumeDeviceMounter.GetDeviceMountPath(deviceToDetach.VolumeSpec)
-		if err != nil {
-			// On failure, return error. Caller will log and retry.
-			return deviceToDetach.GenerateError("GetDeviceMountPath failed", err)
-		}
+		deviceMountPath := deviceToDetach.DeviceMountPath
 		refs, err := deviceMountableVolumePlugin.GetDeviceMountRefs(deviceMountPath)
-
-		if err != nil || mount.HasMountRefs(deviceMountPath, refs) {
-			if err == nil {
-				err = fmt.Errorf("The device mount path %q is still mounted by other references %v", deviceMountPath, refs)
-			}
+		//TODO ???
+		//if err != nil || mount.HasMountRefs(deviceMountPath, refs) {
+		//	if err == nil {
+		//		err = fmt.Errorf("The device mount path %q is still mounted by other references %v", deviceMountPath, refs)
+		//	}
+		if err != nil {
 			return deviceToDetach.GenerateError("GetDeviceMountRefs check failed", err)
 		}
+		if !strings.Contains(deviceMountableVolumePlugin.GetPluginName(), "qcloud-cbs") && hasMountRefs(deviceMountPath, refs) {
+			return deviceToDetach.GenerateError("GetDeviceMountRefs check failed", fmt.Errorf("The device mount path %q is still mounted by other references %v", deviceMountPath, refs))
+
+		}
+
+		/*for _, ref := range refs {
+			unmountDeviceErr := volumeDeviceMounter.UnmountDevice(ref)
+			if unmountDeviceErr != nil {
+				// On failure, return error. Caller will log and retry.
+				return deviceToDetach.GenerateError("UnmountDevice failed", unmountDeviceErr)
+			}
+		} */
+
 		// Execute unmount
 		unmountDeviceErr := volumeDeviceUmounter.UnmountDevice(deviceMountPath)
 		if unmountDeviceErr != nil {
