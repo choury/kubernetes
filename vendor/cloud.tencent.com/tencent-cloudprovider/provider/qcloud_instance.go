@@ -252,4 +252,7 @@ func (self *QCloud) GetZoneByProviderID(ctx context.Context, providerID string) 
 func (self *QCloud) GetZoneByNodeName(ctx context.Context, nodeName types.NodeName) (cloudprovider.Zone, error) {
 	return cloudprovider.Zone{Region: self.Config.Region, FailureDomain: self.Config.Zone}, nil
 }
+func (self *QCloud)InstanceShutdownByProviderID(ctx context.Context, providerID string) (bool, error)  {
+	return false,nil
+}
 

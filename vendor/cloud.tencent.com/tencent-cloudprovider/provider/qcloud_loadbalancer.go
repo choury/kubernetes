@@ -534,3 +534,8 @@ func (self *QCloud) EnsureLoadBalancerDeleted(ctx context.Context, clusterName s
 
 	return nil
 }
+
+func (self *QCloud)  GetLoadBalancerName(ctx context.Context, clusterName string, service *v1.Service) string {
+	glog.V(0).Infof("GetLoadBalancerName call")
+	return ""
+}

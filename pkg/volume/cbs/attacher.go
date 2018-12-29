@@ -53,6 +53,10 @@ func (plugin *qcloudDiskPlugin) NewAttacher() (volume.Attacher, error) {
 	}, nil
 }
 
+func (plugin *qcloudDiskPlugin) NewDeviceMounter() (volume.DeviceMounter, error) {
+	return plugin.NewAttacher()
+}
+
 func (attacher *qcloudCbsAttacher) Attach(spec *volume.Spec, hostname types.NodeName) (string, error) {
 	hostName := string(hostname)
 	volumeSource, _, err := getVolumeSource(spec)
@@ -172,7 +176,7 @@ func (attacher *qcloudCbsAttacher) GetDeviceMountPath(spec *volume.Spec) (string
 // by deviceMountPath; returns a list of paths.
 func (plugin *qcloudDiskPlugin) GetDeviceMountRefs(deviceMountPath string) ([]string, error) {
 	mounter := plugin.host.GetMounter(qcloudCbsPluginName)
-	return mount.GetMountRefs(mounter, deviceMountPath)
+	return mounter.GetMountRefs(deviceMountPath)
 }
 
 // MountDevice mounts device to global mount point.
@@ -230,6 +234,10 @@ func (plugin *qcloudDiskPlugin) NewDetacher() (volume.Detacher, error) {
 	}, nil
 }
 
+func (plugin *qcloudDiskPlugin) NewDeviceUnmounter() (volume.DeviceUnmounter, error) {
+	return plugin.NewDetacher()
+}
+
 // Detach the given device from the given host.
 func (detacher *qcloudCbsDetacher) Detach(deviceMountPath string, hostname types.NodeName) error {
 	hostName := hostname
@@ -284,3 +292,5 @@ func (detacher *qcloudCbsDetacher) WaitForDetach(devicePath string, timeout time
 func (detacher *qcloudCbsDetacher) UnmountDevice(deviceMountPath string) error {
 	return volumeutil.UnmountPath(deviceMountPath, detacher.mounter)
 }
+
+

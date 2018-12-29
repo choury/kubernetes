@@ -283,7 +283,7 @@ func (v *qcloudCbsUnmounter) TearDownAt(dir string) error {
 	}
 
 	mounter := v.plugin.host.GetMounter(qcloudCbsPluginName)
-	refs, err := mount.GetMountRefs(mounter, dir)
+	refs, err := mounter.GetMountRefs(dir)
 	if err != nil {
 		fmt.Errorf("Failed to unmount volume dir:%s,err:%v", dir, err)
 	}
