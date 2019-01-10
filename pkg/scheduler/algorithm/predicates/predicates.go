@@ -292,10 +292,11 @@ func NoDiskConflict(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *sch
 
 // MaxPDVolumeCountChecker contains information to check the max number of volumes for a predicate.
 type MaxPDVolumeCountChecker struct {
-	filter     VolumeFilter
-	maxVolumes int
-	pvInfo     PersistentVolumeInfo
-	pvcInfo    PersistentVolumeClaimInfo
+	filter         VolumeFilter
+	volumeLimitKey v1.ResourceName
+	maxVolumeFunc  func(node *v1.Node) int
+	pvInfo         PersistentVolumeInfo
+	pvcInfo        PersistentVolumeClaimInfo
 
 	// The string below is generated randomly during the struct's initialization.
 	// It is used to prefix volumeID generated inside the predicate() method to
@@ -1171,7 +1172,7 @@ func (c *PodAffinityChecker) InterPodAffinityMatches(pod *v1.Pod, meta algorithm
 	if affinity == nil || (affinity.PodAffinity == nil && affinity.PodAntiAffinity == nil) {
 		return true, nil, nil
 	}
-	if failedPredicates, error := c.satisfiesPodsAffinityAntiAffinity(pod, nodeInfo, affinity); failedPredicates != nil {
+	if failedPredicates, error := c.satisfiesPodsAffinityAntiAffinity(pod, meta, nodeInfo, affinity); failedPredicates != nil {
 		failedPredicates := append([]algorithm.PredicateFailureReason{ErrPodAffinityNotMatch}, failedPredicates)
 		return false, failedPredicates, error
 	}
@@ -1475,14 +1476,7 @@ func CheckNodeUnschedulablePredicate(pod *v1.Pod, meta algorithm.PredicateMetada
 		return false, []algorithm.PredicateFailureReason{ErrNodeUnknownCondition}, nil
 	}
 
-	// If pod tolerate unschedulable taint, it's also tolerate `node.Spec.Unschedulable`.
-	podToleratesUnschedulable := v1helper.TolerationsTolerateTaint(pod.Spec.Tolerations, &v1.Taint{
-		Key:    algorithm.TaintNodeUnschedulable,
-		Effect: v1.TaintEffectNoSchedule,
-	})
-
-	// TODO (k82cn): deprecates `node.Spec.Unschedulable` in 1.13.
-	if nodeInfo.Node().Spec.Unschedulable && !podToleratesUnschedulable {
+	if nodeInfo.Node().Spec.Unschedulable {
 		return false, []algorithm.PredicateFailureReason{ErrNodeUnschedulable}, nil
 	}
 
@@ -1553,6 +1547,16 @@ func CheckNodeDiskPressurePredicate(pod *v1.Pod, meta algorithm.PredicateMetadat
 	// check if node is under disk pressure
 	if nodeInfo.DiskPressureCondition() == v1.ConditionTrue {
 		return false, []algorithm.PredicateFailureReason{ErrNodeUnderDiskPressure}, nil
+	}
+	return true, nil, nil
+}
+
+// CheckNodePIDPressurePredicate checks if a pod can be scheduled on a node
+// reporting pid pressure condition.
+func CheckNodePIDPressurePredicate(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *schedulercache.NodeInfo) (bool, []algorithm.PredicateFailureReason, error) {
+	// check if node is under pid pressure
+	if nodeInfo.PIDPressureCondition() == v1.ConditionTrue {
+		return false, []algorithm.PredicateFailureReason{ErrNodeUnderPIDPressure}, nil
 	}
 	return true, nil, nil
 }
