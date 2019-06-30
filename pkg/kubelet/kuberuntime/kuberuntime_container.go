@@ -58,6 +58,8 @@ var (
 	ErrPreStartHook = errors.New("PreStartHookError")
 	// ErrPostStartHook - failed to execute PostStartHook
 	ErrPostStartHook = errors.New("PostStartHookError")
+	// ErrSaveContainerResources - failed to save container resources to disk.
+	ErrSaveContainerResources = errors.New("SaveContainerResourcesError")
 )
 
 // recordContainerEvent should be used by the runtime manager for all container related events.
@@ -119,6 +121,12 @@ func (m *kubeGenericRuntimeManager) startContainer(podSandboxID string, podSandb
 	if err != nil {
 		m.recordContainerEvent(pod, container, "", v1.EventTypeWarning, events.FailedToCreateContainer, "Error: %v", grpc.ErrorDesc(err))
 		return grpc.ErrorDesc(err), ErrCreateContainerConfig
+	}
+
+	err = m.runtimeHelper.SaveContainerResources(pod, container)
+	if err != nil {
+		m.recordContainerEvent(pod, container, "", v1.EventTypeWarning, events.FailedToCreateContainer, "Error: %v", grpc.ErrorDesc(err))
+		return grpc.ErrorDesc(err), ErrSaveContainerResources
 	}
 
 	containerID, err := m.runtimeService.CreateContainer(podSandboxID, containerConfig, podSandboxConfig)
@@ -420,6 +428,12 @@ func (m *kubeGenericRuntimeManager) getPodContainerStatuses(uid kubetypes.UID, n
 				cStatus.Message = tMessage
 			}
 		}
+		resoucrs, err := m.runtimeHelper.GetContainerResources(uid, cStatus.Name)
+		if err != nil {
+			klog.Errorf("GetContainerResource for %s error: %v", c.Id, err)
+		} else {
+			cStatus.Resources = resoucrs
+		}
 		statuses[i] = cStatus
 	}
 
@@ -525,6 +539,33 @@ func (m *kubeGenericRuntimeManager) restoreSpecsFromContainerLabels(containerID 
 		}
 	}
 	return pod, container, nil
+}
+
+// updateContainer will update a contianer (only resources now).
+func (m *kubeGenericRuntimeManager) updateContainer(pod *v1.Pod, podStatus *kubecontainer.PodStatus, container *v1.Container, containerID kubecontainer.ContainerID, resource *runtimeapi.LinuxContainerResources) error {
+	if err := m.runtimeService.UpdateContainerResources(containerID.ID, resource); err != nil {
+		m.recordContainerEvent(pod, container, containerID.ID, v1.EventTypeWarning, events.FailedToUpdateContainer, "Error: %v", grpc.ErrorDesc(err))
+		return err
+	}
+
+	// Run internal post-update lifecycle hook
+	if err := m.internalLifecycle.PostUpdateContainer(pod, container, containerID.ID); err != nil {
+		m.recordContainerEvent(pod, container, containerID.ID, v1.EventTypeWarning, events.FailedToUpdateContainer, "Error: %v", grpc.ErrorDesc(err))
+		return err
+	}
+
+	// Update Resources of the container on disk.
+	// We can recall updateContainer if it failed.
+	containerStatus := podStatus.FindContainerStatusByName(container.Name)
+	if containerStatus != nil {
+		containerStatus.Resources = &container.Resources
+	}
+	if err := m.runtimeHelper.SaveContainerResources(pod, container); err != nil {
+		m.recordContainerEvent(pod, container, containerID.ID, v1.EventTypeWarning, events.FailedToUpdateContainer, "Error: %v", grpc.ErrorDesc(err))
+		return err
+	}
+	m.recordContainerEvent(pod, container, containerID.ID, v1.EventTypeNormal, events.UpdatedContainer, "Updated container with id %s", containerID.String())
+	return nil
 }
 
 // killContainer kills a container through the following steps:

@@ -29,7 +29,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/kubernetes/pkg/features"
 	runtimeapi "k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2"
 	"k8s.io/kubernetes/pkg/kubelet/util/format"
 	hashutil "k8s.io/kubernetes/pkg/util/hash"
@@ -55,6 +57,8 @@ type RuntimeHelper interface {
 	// supplemental groups for the Pod. These extra supplemental groups come
 	// from annotations on persistent volumes that the pod depends on.
 	GetExtraSupplementalGroupsForPod(pod *v1.Pod) []int64
+	SaveContainerResources(pod *v1.Pod, container *v1.Container) error
+	GetContainerResources(podUID types.UID, containerName string) (*v1.ResourceRequirements, error)
 }
 
 // ShouldContainerBeRestarted checks whether a container needs to be restarted.
@@ -121,7 +125,16 @@ func ExceedMaxRetries(pod *v1.Pod, restartCount int) bool {
 
 // HashContainer returns the hash of the container. It is used to compare
 // the running container with its desired spec.
+// If inplace resources update enabled,
+// we ignore 'Resources' here, it will be compared additional.
 func HashContainer(container *v1.Container) uint64 {
+	if utilfeature.DefaultFeatureGate.Enabled(features.InPlaceResourcesUpdate) {
+		resources := container.Resources
+		container.Resources = v1.ResourceRequirements{}
+		defer func() {
+			container.Resources = resources
+		}()
+	}
 	hash := fnv.New32a()
 	hashutil.DeepHashObject(hash, *container)
 	return uint64(hash.Sum32())

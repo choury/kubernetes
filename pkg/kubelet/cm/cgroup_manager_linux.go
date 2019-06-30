@@ -346,6 +346,7 @@ func getSupportedSubsystems() map[subsystem]bool {
 // but this is not possible with libcontainers Set() method
 // See https://github.com/opencontainers/runc/issues/932
 func setSupportedSubsystems(cgroupConfig *libcontainerconfigs.Cgroup) error {
+	errs := []error{}
 	for sys, required := range getSupportedSubsystems() {
 		if _, ok := cgroupConfig.Paths[sys.Name()]; !ok {
 			if required {
@@ -356,8 +357,11 @@ func setSupportedSubsystems(cgroupConfig *libcontainerconfigs.Cgroup) error {
 			continue
 		}
 		if err := sys.Set(cgroupConfig.Paths[sys.Name()], cgroupConfig); err != nil {
-			return fmt.Errorf("Failed to set config for supported subsystems : %v", err)
+			errs = append(errs, err)
 		}
+	}
+	if len(errs) != 0 {
+		return fmt.Errorf("Failed to set config for supported subsystems : %v", errs)
 	}
 	return nil
 }

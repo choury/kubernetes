@@ -65,3 +65,10 @@ func (f *FakeRuntimeHelper) GetPodDir(podUID kubetypes.UID) string {
 func (f *FakeRuntimeHelper) GetExtraSupplementalGroupsForPod(pod *v1.Pod) []int64 {
 	return nil
 }
+
+func (f *FakeRuntimeHelper) SaveContainerResources(pod *v1.Pod, container *v1.Container) error {
+	return nil
+}
+func (f *FakeRuntimeHelper) GetContainerResources(podUID kubetypes.UID, containerName string) (*v1.ResourceRequirements, error) {
+	return nil, nil
+}

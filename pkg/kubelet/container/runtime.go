@@ -312,6 +312,8 @@ type ContainerStatus struct {
 	// Message written by the container before exiting (stored in
 	// TerminationMessagePath).
 	Message string
+	//a resource copy, got from the disk
+	Resources *v1.ResourceRequirements
 }
 
 // FindContainerStatusByName returns container status in the pod status with the given name.

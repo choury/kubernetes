@@ -23,7 +23,7 @@ import (
 	"path"
 	"strings"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
@@ -99,6 +99,23 @@ func (m *podContainerManagerImpl) EnsureExists(pod *v1.Pod) error {
 	// Because maintaining the desired state is difficult without checkpointing.
 	if err := m.applyLimits(pod); err != nil {
 		return fmt.Errorf("failed to apply resource limits on container for %v : %v", podContainerName, err)
+	}
+	return nil
+}
+
+// Update update the pod's cgroup if exists
+func (m *podContainerManagerImpl) Update(pod *v1.Pod) error {
+	podContainerName, _ := m.GetPodContainerName(pod)
+	// Update the pod container
+	containerConfig := &CgroupConfig{
+		Name:               podContainerName,
+		ResourceParameters: ResourceConfigForPod(pod, m.enforceCPULimits, m.cpuCFSQuotaPeriod),
+	}
+	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.SupportPodPidsLimit) && m.podPidsLimit > 0 {
+		containerConfig.ResourceParameters.PidsLimit = &m.podPidsLimit
+	}
+	if err := m.cgroupManager.Update(containerConfig); err != nil {
+		return fmt.Errorf("failed to create container for %v : %v", podContainerName, err)
 	}
 	return nil
 }
@@ -297,6 +314,10 @@ func (m *podContainerManagerNoop) Exists(_ *v1.Pod) bool {
 }
 
 func (m *podContainerManagerNoop) EnsureExists(_ *v1.Pod) error {
+	return nil
+}
+
+func (m *podContainerManagerNoop) Update(_ *v1.Pod) error {
 	return nil
 }
 

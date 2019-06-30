@@ -19,6 +19,7 @@ package kubelet
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -32,7 +33,7 @@ import (
 	"strings"
 	"sync"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -1785,4 +1786,44 @@ func (kl *Kubelet) hasHostMountPVC(pod *v1.Pod) bool {
 		}
 	}
 	return false
+}
+
+// SaveContainerResources save the resources to disk
+func (kl *Kubelet) SaveContainerResources(pod *v1.Pod, container *v1.Container) error {
+	resourceFile := kl.getPodContainerResourceFile(pod.UID, container.Name)
+
+	var err error
+	var content []byte
+	if content, err = json.Marshal(container.Resources); err != nil {
+		klog.Error("Unable not serialize Resources to json")
+		return err
+	}
+
+	if err = ioutil.WriteFile(resourceFile, content, 0644); err != nil {
+		klog.Error("Resource file not written: ", resourceFile)
+		return err
+	}
+	return nil
+}
+
+// GetContainerResources restore the resources from disk
+func (kl *Kubelet) GetContainerResources(podUID types.UID, containerName string) (*v1.ResourceRequirements, error) {
+	resourceFile := kl.getPodContainerResourceFile(podUID, containerName)
+
+	var err error
+	var content []byte
+	if content, err = ioutil.ReadFile(resourceFile); err != nil {
+		if os.IsNotExist(err) {
+			klog.Warningf("Resources file \"%s\" not exists", resourceFile)
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var resources v1.ResourceRequirements
+	if err = json.Unmarshal(content, &resources); err != nil {
+		klog.Error("Unable unmarshal Resources file ", resourceFile)
+		return nil, err
+	}
+	return &resources, nil
 }

@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -46,6 +47,7 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	containertest "k8s.io/kubernetes/pkg/kubelet/container/testing"
+	kuberuntime "k8s.io/kubernetes/pkg/kubelet/kuberuntime"
 	"k8s.io/kubernetes/pkg/kubelet/server/portforward"
 	"k8s.io/kubernetes/pkg/kubelet/server/remotecommand"
 	"k8s.io/kubernetes/pkg/util/mount"
@@ -2600,5 +2602,64 @@ func TestTruncatePodHostname(t *testing.T) {
 		output, err := truncatePodHostnameIfNeeded("test-pod", test.input)
 		assert.NoError(t, err)
 		assert.Equal(t, test.output, output)
+	}
+}
+
+func TestSaveContainerResources(t *testing.T) {
+	pod := v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			UID: "foo",
+		},
+		Spec: v1.PodSpec{
+			Containers: []v1.Container{
+				{
+					Name: "bar1",
+				},
+				{
+					Name: "bar2",
+					Resources: v1.ResourceRequirements{
+						Limits: v1.ResourceList{
+							"cpu":    resource.MustParse("1"),
+							"memory": resource.MustParse("1Gi"),
+						},
+					},
+				},
+				{
+					Name: "bar3",
+					Resources: v1.ResourceRequirements{
+						Requests: v1.ResourceList{
+							"cpu":    resource.MustParse("100m"),
+							"memory": resource.MustParse("1.1Gi"),
+						},
+					},
+				},
+				{
+					Name: "bar4",
+					Resources: v1.ResourceRequirements{
+						Limits: v1.ResourceList{
+							"cpu":    resource.MustParse("1"),
+							"memory": resource.MustParse("1Gi"),
+						},
+						Requests: v1.ResourceList{
+							"cpu":    resource.MustParse("0.2"),
+							"memory": resource.MustParse("100m"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	testKubelet := newTestKubelet(t, false)
+	defer testKubelet.Cleanup()
+	kl := testKubelet.kubelet
+
+	for _, c := range pod.Spec.Containers {
+		os.MkdirAll(kl.getPodContainerDir(pod.UID, c.Name), os.FileMode(0755))
+		assert.NoError(t, kl.SaveContainerResources(&pod, &c))
+
+		resource, err := kl.GetContainerResources(pod.UID, c.Name)
+		assert.NoError(t, err)
+		assert.EqualValues(t, true, kuberuntime.ResourcesEqual(&c.Resources, resource), c.Name)
 	}
 }
