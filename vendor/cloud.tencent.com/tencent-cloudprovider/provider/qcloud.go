@@ -29,14 +29,19 @@ import (
 
 	"github.com/dbdd4us/qcloudapi-sdk-go/cbs"
 	"github.com/dbdd4us/qcloudapi-sdk-go/clb"
+	"github.com/dbdd4us/qcloudapi-sdk-go/common"
 	"github.com/dbdd4us/qcloudapi-sdk-go/cvm"
 	"github.com/dbdd4us/qcloudapi-sdk-go/snap"
-
-	"github.com/dbdd4us/qcloudapi-sdk-go/common"
 
 	"encoding/json"
 	"errors"
 	"time"
+
+	//for cbs cvm v3 yun api
+	cbsv3 "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/cbs/v20170312"
+	cvmv3 "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/cvm/v20170312"
+	v3common "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common"
+	"github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common/profile"
 )
 
 const (
@@ -56,14 +61,17 @@ type QCloud struct {
 	cbs                 *cbs.Client
 	snap                *snap.Client
 
+	cbsV3            *cbsv3.Client
+	cvmV3            *cvmv3.Client
 	Config           *Config
 	selfInstanceInfo *cvm.InstanceInfo
 }
 
 type Config struct {
-	Region string `json:"region"`
-	Zone   string `json:"zone"`
-	VpcId  string `json:"vpcId"`
+	Region     string `json:"region"`
+	RegionName string `json:"regionName"`
+	Zone       string `json:"zone"`
+	VpcId      string `json:"vpcId"`
 
 	QCloudSecretId  string `json:"QCloudSecretId"`
 	QCloudSecretKey string `json:"QCloudSecretKey"`
@@ -95,25 +103,37 @@ func readConfig(cfg io.Reader) error {
 func newQCloud() (*QCloud, error) {
 
 	var cred common.CredentialInterface
+	var cbsV3Client *cbsv3.Client
+	var cvmV3Client *cvmv3.Client
 
 	if config.QCloudSecretId == "" || config.QCloudSecretKey == "" {
 		expiredDuration := time.Second * 7200
 
 		refresher, err := credential.NewNormRefresher(expiredDuration)
 		if err != nil {
-			fmt.Println(err)
+			glog.Errorf("NewNormRefresher failed, %v", err)
+		}
+		normCredV3, err := credential.NewNormCredentialV3(expiredDuration, refresher)
+		if err != nil {
+			glog.Errorf("NewNormCredentialV3 failed, %v", err)
 		}
 		normCred, err := credential.NewNormCredential(expiredDuration, refresher)
-		if err != nil {
-			fmt.Println(err)
+		if err != nil{
+			glog.Errorf("NewNormCredential failed, %v", err)
 		}
 		cred = &normCred
-
+		cpf := profile.NewClientProfile()
+		cbsV3Client, _ = cbsv3.NewClient(&normCredV3, config.RegionName, cpf)
+		cvmV3Client, _ = cvmv3.NewClient(&normCredV3, config.RegionName, cpf)
 	} else {
 		cred = common.Credential{
 			SecretId:  config.QCloudSecretId,
 			SecretKey: config.QCloudSecretKey,
 		}
+		commonCred := v3common.NewCredential(config.QCloudSecretId, config.QCloudSecretKey)
+		cpf := profile.NewClientProfile()
+		cbsV3Client, _ = cbsv3.NewClient(commonCred, config.RegionName, cpf)
+		cvmV3Client, _ = cvmv3.NewClient(commonCred, config.RegionName, cpf)
 	}
 
 	cvmClient, err := cvm.NewClient(
@@ -160,6 +180,8 @@ func newQCloud() (*QCloud, error) {
 		clb:      clbClient,
 		cbs:      cbsClient,
 		snap:     snapClient,
+		cbsV3:    cbsV3Client,
+		cvmV3:    cvmV3Client,
 	}
 
 	return cloud, nil
