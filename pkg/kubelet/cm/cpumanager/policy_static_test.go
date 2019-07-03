@@ -124,7 +124,7 @@ func TestStaticPolicyStart(t *testing.T) {
 				assignments:   testCase.stAssignments,
 				defaultCPUSet: testCase.stDefaultCPUSet,
 			}
-			policy.Start(st)
+			policy.Start(st, &mockPodStatusProvider{})
 
 			if !testCase.stDefaultCPUSet.IsEmpty() {
 				for cpuid := 1; cpuid < policy.topology.NumCPUs; cpuid++ {

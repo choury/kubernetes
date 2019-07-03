@@ -25,6 +25,11 @@ import (
 
 var supportedQoSComputeResources = sets.NewString(string(core.ResourceCPU), string(core.ResourceMemory))
 
+const (
+	TencentPodTypeFat       = "fat"
+	TencentPodTypeAffiliate = "affiliate"
+)
+
 // QOSList is a set of (resource name, QoS class) pairs.
 type QOSList map[v1.ResourceName]v1.PodQOSClass
 
@@ -37,6 +42,12 @@ func isSupportedQoSComputeResource(name v1.ResourceName) bool {
 // A pod is guaranteed only when requests and limits are specified for all the containers and they are equal.
 // A pod is burstable if limits and requests do not match across all containers.
 func GetPodQOS(pod *v1.Pod) v1.PodQOSClass {
+	if IsTencentFatPod(pod.Annotations) {
+		return v1.PodQOSGuaranteed
+	}
+	if IsTencentAffiliatePod(pod.Annotations) {
+		return v1.PodQOSBestEffort
+	}
 	requests := v1.ResourceList{}
 	limits := v1.ResourceList{}
 	zeroQuantity := resource.MustParse("0")
@@ -96,4 +107,12 @@ func GetPodQOS(pod *v1.Pod) v1.PodQOSClass {
 		return v1.PodQOSGuaranteed
 	}
 	return v1.PodQOSBurstable
+}
+
+func IsTencentFatPod(annotations map[string]string) bool {
+	return annotations[core.TencentPodTypeAnnotationKey] == TencentPodTypeFat
+}
+
+func IsTencentAffiliatePod(annotations map[string]string) bool {
+	return annotations[core.TencentPodTypeAnnotationKey] == TencentPodTypeAffiliate
 }

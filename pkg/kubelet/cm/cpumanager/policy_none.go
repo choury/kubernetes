@@ -20,6 +20,7 @@ import (
 	"k8s.io/api/core/v1"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/state"
+	"k8s.io/kubernetes/pkg/kubelet/status"
 )
 
 type nonePolicy struct{}
@@ -38,7 +39,7 @@ func (p *nonePolicy) Name() string {
 	return string(PolicyNone)
 }
 
-func (p *nonePolicy) Start(s state.State) {
+func (p *nonePolicy) Start(s state.State, podStatusProvider status.PodStatusProvider) {
 	klog.Info("[cpumanager] none policy: Start")
 }
 

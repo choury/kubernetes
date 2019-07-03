@@ -104,24 +104,16 @@ var _ Manager = &manager{}
 func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo *cadvisorapi.MachineInfo, nodeAllocatableReservation v1.ResourceList, stateFileDirectory string, cpuReservedEnabled bool) (Manager, error) {
 	var policy Policy
 
-	// Record reserved cpu sets
-	reservedCpus := cpuset.NewCPUSet()
-
-	switch policyName(cpuPolicyName) {
-
-	case PolicyNone:
-		policy = NewNonePolicy()
-
-	case PolicyStatic:
+	topoFunc := func() (*topology.CPUTopology, int, error) {
 		topo, err := topology.Discover(machineInfo)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		klog.Infof("[cpumanager] detected CPU topology: %v", topo)
 		reservedCPUs, ok := nodeAllocatableReservation[v1.ResourceCPU]
 		if !ok {
 			// The static policy cannot initialize without this information.
-			return nil, fmt.Errorf("[cpumanager] unable to determine reserved CPU resources for static policy")
+			return nil, 0, fmt.Errorf("[cpumanager] unable to determine reserved CPU resources for static policy")
 		}
 		if reservedCPUs.IsZero() {
 			// The static policy requires this to be nonzero. Zero CPU reservation
@@ -129,15 +121,13 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 			// either we would violate our guarantee of exclusivity or need to evict
 			// any pod that has at least one container that requires zero CPUs.
 			// See the comments in policy_static.go for more details.
-			return nil, fmt.Errorf("[cpumanager] the static policy requires systemreserved.cpu + kubereserved.cpu to be greater than zero")
+			return nil, 0, fmt.Errorf("[cpumanager] the static policy requires systemreserved.cpu + kubereserved.cpu to be greater than zero")
 		}
 
 		// Take the ceiling of the reservation, since fractional CPUs cannot be
 		// exclusively allocated.
 		reservedCPUsFloat := float64(reservedCPUs.MilliValue()) / 1000
 		numReservedCPUs := int(math.Ceil(reservedCPUsFloat))
-		policy = NewStaticPolicy(topo, numReservedCPUs)
-
 		// If cpu reserved is enabled, the reserved cores must be integer, or will lead to wrong state for pods with non-integer cpu requests
 		if cpuReservedEnabled {
 			if reservedCPUsFloat != float64(numReservedCPUs) {
@@ -145,11 +135,32 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 				klog.Error(errMsg)
 				panic(errMsg)
 			}
+		}
+		return topo, numReservedCPUs, nil
+	}
 
+	// Record reserved cpu sets
+	reservedCpus := cpuset.NewCPUSet()
+
+	switch policyName(cpuPolicyName) {
+	case PolicyNone:
+		policy = NewNonePolicy()
+	case PolicyStatic:
+		topo, numReservedCPUs, err := topoFunc()
+		if err != nil {
+			return nil, err
+		}
+		policy = NewStaticPolicy(topo, numReservedCPUs)
+		if cpuReservedEnabled {
 			// Record reserved cpu sets
 			reservedCpus = policy.(*staticPolicy).reserved
 		}
-
+	case PolicyAffiliate:
+		topo, numReservedCPUs, err := topoFunc()
+		if err != nil {
+			return nil, err
+		}
+		policy = NewAffiliatePolicy(topo, numReservedCPUs)
 	default:
 		klog.Errorf("[cpumanager] Unknown policy \"%s\", falling back to default policy \"%s\"", cpuPolicyName, PolicyNone)
 		policy = NewNonePolicy()
@@ -178,7 +189,7 @@ func (m *manager) Start(activePods ActivePodsFunc, podStatusProvider status.PodS
 	m.podStatusProvider = podStatusProvider
 	m.containerRuntime = containerRuntime
 
-	m.policy.Start(m.state)
+	m.policy.Start(m.state, podStatusProvider)
 	if m.policy.Name() == string(PolicyNone) {
 		return
 	}

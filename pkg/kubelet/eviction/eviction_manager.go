@@ -24,12 +24,13 @@ import (
 
 	"k8s.io/klog"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/clock"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/tools/record"
 	apiv1resource "k8s.io/kubernetes/pkg/api/v1/resource"
+	"k8s.io/kubernetes/pkg/apis/core"
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	v1qos "k8s.io/kubernetes/pkg/apis/core/v1/helper/qos"
 	"k8s.io/kubernetes/pkg/features"
@@ -130,6 +131,45 @@ func NewManager(
 func (m *managerImpl) Admit(attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitResult {
 	m.RLock()
 	defer m.RUnlock()
+
+	if v1qos.IsTencentAffiliatePod(attrs.Pod.Annotations) {
+		affPod, found := attrs.Pod.Annotations[core.TencentAffiliatedAnnotationKey]
+		if found {
+			// if has a affiliated pod
+			var fragCPU, occuCPU resource.Quantity
+			for _, pod := range attrs.OtherPods {
+				// we add frag cpu and drop used by another affliated pod
+				if string(pod.UID) == affPod {
+					for _, c := range pod.Spec.Containers {
+						fragCPU.Add(*c.Resources.Limits.Cpu())
+						fragCPU.Sub(*c.Resources.Requests.Cpu())
+					}
+					continue
+				}
+
+				if pod.Annotations[core.TencentAffiliatedAnnotationKey] == affPod {
+					for _, c := range pod.Spec.Containers {
+						occuCPU.Add(*c.Resources.Limits.Cpu())
+					}
+				}
+			}
+			// We use requests here because the resources of affiliated pod may be changed after bound
+			// It's OK if the fragment resource is enough for requests since only requests are guaranteed.
+			for _, c := range attrs.Pod.Spec.Containers {
+				occuCPU.Add(*c.Resources.Requests.Cpu())
+			}
+			if occuCPU.Value() > fragCPU.Value() {
+				message := fmt.Sprintf("Failed to admit pod %s - fragment cpu is less than occupied", format.Pod(attrs.Pod))
+				klog.Warning(message)
+				return lifecycle.PodAdmitResult{
+					Admit:   false,
+					Reason:  Reason,
+					Message: message,
+				}
+			}
+		}
+	}
+
 	if len(m.nodeConditions) == 0 {
 		return lifecycle.PodAdmitResult{Admit: true}
 	}

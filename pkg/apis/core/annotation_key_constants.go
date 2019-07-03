@@ -107,4 +107,7 @@ const (
 	// This annotation is used by the Attach Detach Controller to determine whether to use the in-tree or
 	// CSI Backend for a volume plugin on a specific node.
 	MigratedPluginsAnnotationKey = "storage.alpha.kubernetes.io/migrated-plugins"
+
+	TencentPodTypeAnnotationKey    = "tencent.com/containertype"
+	TencentAffiliatedAnnotationKey = "tencent.com/affiliated"
 )

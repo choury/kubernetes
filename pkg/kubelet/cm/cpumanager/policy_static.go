@@ -25,6 +25,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/state"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/topology"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpuset"
+	"k8s.io/kubernetes/pkg/kubelet/status"
 )
 
 // PolicyStatic is the name of the static policy
@@ -106,7 +107,7 @@ func (p *staticPolicy) Name() string {
 	return string(PolicyStatic)
 }
 
-func (p *staticPolicy) Start(s state.State) {
+func (p *staticPolicy) Start(s state.State, podStatusProvider status.PodStatusProvider) {
 	if err := p.validateState(s); err != nil {
 		klog.Errorf("[cpumanager] static policy invalid state: %s\n", err.Error())
 		panic("[cpumanager] - please drain node and remove policy state file")
