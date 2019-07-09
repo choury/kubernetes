@@ -24,12 +24,11 @@ import (
 	"time"
 
 	qcloud "cloud.tencent.com/tencent-cloudprovider/provider"
-	"github.com/golang/glog"
+	"k8s.io/klog"
+	"k8s.io/api/core/v1"
 	"k8s.io/kubernetes/pkg/util/mount"
 	"k8s.io/kubernetes/pkg/volume"
-	"k8s.io/api/core/v1"
 
-	volumeutil "k8s.io/kubernetes/pkg/volume/util"
 	volumehelper "k8s.io/kubernetes/pkg/volume/util"
 )
 
@@ -69,19 +68,19 @@ func (attacher *qcloudCbsAttacher) Attach(spec *volume.Spec, hostname types.Node
 	}
 	diskId := volumeSource.CbsDiskId
 
-	glog.V(4).Infof("Attach disk called for host %s", hostName)
+	klog.V(4).Infof("Attach disk called for host %s", hostName)
 
 	attached, err := attacher.qcloudDisks.DiskIsAttached(diskId, hostname)
 	if err != nil {
-		glog.Errorf("check cbs disk(%q) is attached to node(%q) error(%v), will continue and try attach anyway",
+		klog.Errorf("check cbs disk(%q) is attached to node(%q) error(%v), will continue and try attach anyway",
 			diskId, hostName, err)
 	}
 
 	if err == nil && attached {
-		glog.Infof("cbs(%q) is already attached to node(%q), attach return success.", diskId, hostName)
+		klog.Infof("cbs(%q) is already attached to node(%q), attach return success.", diskId, hostName)
 	} else {
 		if err := attacher.qcloudDisks.AttachDisk(diskId, hostname); err != nil {
-			glog.Errorf("error attaching cbs(%s) to node(%s): %+v", diskId, hostName, err)
+			klog.Errorf("error attaching cbs(%s) to node(%s): %+v", diskId, hostName, err)
 			return "", err
 		}
 	}
@@ -100,7 +99,7 @@ func (attacher *qcloudCbsAttacher) VolumesAreAttached(specs []*volume.Spec, node
 		volumeSource, _, err := getVolumeSource(spec)
 		// If error is occured, skip this volume and move to the next one
 		if err != nil {
-			glog.Errorf("Error getting volume (%q) source : %v", spec.Name(), err)
+			klog.Errorf("Error getting volume (%q) source : %v", spec.Name(), err)
 			continue
 		}
 		diskIdList = append(diskIdList, volumeSource.CbsDiskId)
@@ -110,7 +109,7 @@ func (attacher *qcloudCbsAttacher) VolumesAreAttached(specs []*volume.Spec, node
 	attachedResult, err := attacher.qcloudDisks.DisksAreAttached(diskIdList, nodename)
 	if err != nil {
 		// Log error and continue with attach
-		glog.Errorf(
+		klog.Errorf(
 			"check cbsDisks are attached(%v) to current node(%q) error: %v",
 			diskIdList, nodeName, err)
 		return volumesAttachedCheck, err
@@ -120,7 +119,7 @@ func (attacher *qcloudCbsAttacher) VolumesAreAttached(specs []*volume.Spec, node
 		if !attached {
 			spec := volumeDiskIdMap[diskId]
 			volumesAttachedCheck[spec] = false
-			glog.V(2).Infof("VolumesAreAttached: check volume %q (specName: %q) is no longer attached",
+			klog.V(2).Infof("VolumesAreAttached: check volume %q (specName: %q) is no longer attached",
 				diskId, spec.Name())
 		}
 	}
@@ -147,15 +146,15 @@ func (attacher *qcloudCbsAttacher) WaitForAttach(spec *volume.Spec, devicePath s
 	for {
 		select {
 		case <-ticker.C:
-			glog.V(5).Infof("Checking cbs disk is attached", volumeSource.CbsDiskId)
+			klog.V(5).Infof("Checking cbs disk is attached", volumeSource.CbsDiskId)
 		//TODO
 			path, err := verifyDevicePath(devicePath)
 			if err != nil {
 				// Log error, if any, and continue checking periodically. See issue #11321
-				glog.Warningf("Error verifying disk (%q) is attached: %v", volumeSource.CbsDiskId, err)
+				klog.Warningf("Error verifying disk (%q) is attached: %v", volumeSource.CbsDiskId, err)
 			} else if path != "" {
 				// A device path has successfully been created
-				glog.Infof("Successfully found attached disk(%q)", volumeSource.CbsDiskId)
+				klog.Infof("Successfully found attached disk(%q)", volumeSource.CbsDiskId)
 				return path, nil
 			}
 		case <-timer.C:
@@ -214,7 +213,7 @@ func (attacher *qcloudCbsAttacher) MountDevice(spec *volume.Spec, devicePath str
 			os.Remove(deviceMountPath)
 			return err
 		}
-		glog.V(4).Infof("formatting spec %v devicePath %v deviceMountPath %v fs %v with options %+v", spec.Name(), devicePath, deviceMountPath, volumeSource.FSType, options)
+		klog.V(4).Infof("formatting spec %v devicePath %v deviceMountPath %v fs %v with options %+v", spec.Name(), devicePath, deviceMountPath, volumeSource.FSType, options)
 	}
 	return nil
 }
@@ -246,26 +245,26 @@ func (plugin *qcloudDiskPlugin) NewDeviceUnmounter() (volume.DeviceUnmounter, er
 func (detacher *qcloudCbsDetacher) Detach(deviceMountPath string, hostname types.NodeName) error {
 	hostName := hostname
 
-	glog.Infof("Detach cbs disk from node(%s), mount path: %s", hostName, deviceMountPath)
+	klog.Infof("Detach cbs disk from node(%s), mount path: %s", hostName, deviceMountPath)
 	//TODO
 	diskId := path.Base(deviceMountPath)
 
 	attached, err := detacher.qcloudDisk.DiskIsAttached(diskId, hostname)
 	if err != nil {
 		// Log error and continue with detach
-		glog.Errorf(
+		klog.Errorf(
 			"Check cbs disk(%s) is attached to node(%s) error(%v). Will continue and try detach anyway.",
 			diskId, hostName, err)
 	}
 
 	if err == nil && !attached {
 		// Volume is not attached to node. Success!
-		glog.Infof("Detach operation is successful. cbs disk(%s) was not attached to node(%s)", diskId, hostName)
+		klog.Infof("Detach operation is successful. cbs disk(%s) was not attached to node(%s)", diskId, hostName)
 		return nil
 	}
 
 	if err = detacher.qcloudDisk.DetachDisk(diskId, hostname); err != nil {
-		glog.Errorf("Error detaching cbs disk(%q) from node(%q): %v", diskId, hostName, err)
+		klog.Errorf("Error detaching cbs disk(%q) from node(%q): %v", diskId, hostName, err)
 		return err
 	}
 
@@ -281,8 +280,8 @@ func (detacher *qcloudCbsDetacher) WaitForDetach(devicePath string, timeout time
 	for {
 		select {
 		case <-ticker.C:
-			glog.V(5).Infof("Checking device %q is detached.", devicePath)
-			if pathExists, err := volumeutil.PathExists(devicePath); err != nil {
+			klog.V(5).Infof("Checking device %q is detached.", devicePath)
+			if pathExists, err := mount.PathExists(devicePath); err != nil {
 				return fmt.Errorf("Error checking if device path exists: %v", err)
 			} else if !pathExists {
 				return nil
@@ -294,5 +293,5 @@ func (detacher *qcloudCbsDetacher) WaitForDetach(devicePath string, timeout time
 }
 
 func (detacher *qcloudCbsDetacher) UnmountDevice(deviceMountPath string) error {
-	return volumeutil.UnmountPath(deviceMountPath, detacher.mounter)
+	return mount.CleanupMountPoint(deviceMountPath, detacher.mounter, false)
 }
