@@ -22,6 +22,7 @@ package operationexecutor
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"k8s.io/klog"
@@ -949,4 +950,14 @@ func (oe *operationExecutor) CheckVolumeExistenceOperation(
 			checkErr)
 	}
 	return islinkExist, nil
+}
+
+func hasMountRefs(mountPath string, mountRefs []string) bool {
+		count := 0
+		for _, ref := range mountRefs {
+				if !strings.Contains(ref, mountPath) {
+						count = count + 1
+					}
+			}
+		return count > 0
 }
