@@ -44,7 +44,6 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm"
 	priorityutil "k8s.io/kubernetes/pkg/scheduler/algorithm/priorities/util"
-	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
 	schedulernodeinfo "k8s.io/kubernetes/pkg/scheduler/nodeinfo"
 	schedutil "k8s.io/kubernetes/pkg/scheduler/util"
 	"k8s.io/kubernetes/pkg/scheduler/volumebinder"
@@ -257,6 +256,12 @@ func isVolumeConflict(volume v1.Volume, pod *v1.Pod) bool {
 			// only one read-write mount is permitted for the same RBD image.
 			// same RBD image mounted by multiple Pods conflicts unless all Pods mount the image read-only
 			if haveOverlap(mon, emon) && pool == epool && image == eimage && !(volume.RBD.ReadOnly && existingVolume.RBD.ReadOnly) {
+				return true
+			}
+		}
+
+		if volume.QcloudCbs != nil && existingVolume.QcloudCbs != nil {
+			if volume.QcloudCbs.CbsDiskId == existingVolume.QcloudCbs.CbsDiskId {
 				return true
 			}
 		}
@@ -1578,14 +1583,11 @@ func CheckNodeUnschedulablePredicate(pod *v1.Pod, meta PredicateMetadata, nodeIn
 		return false, []PredicateFailureReason{ErrNodeUnknownCondition}, nil
 	}
 
-	// If pod tolerate unschedulable taint, it's also tolerate `node.Spec.Unschedulable`.
-	podToleratesUnschedulable := v1helper.TolerationsTolerateTaint(pod.Spec.Tolerations, &v1.Taint{
-		Key:    schedulerapi.TaintNodeUnschedulable,
-		Effect: v1.TaintEffectNoSchedule,
-	})
-
+	// TKE modify here,
+	// origin: If pod tolerate unschedulable taint, it's also tolerate `node.Spec.Unschedulable`
+	// TKE: If pod tolerate unschedulable taint, but it can't  tolerate `node.Spec.Unschedulable`
 	// TODO (k82cn): deprecates `node.Spec.Unschedulable` in 1.13.
-	if nodeInfo.Node().Spec.Unschedulable && !podToleratesUnschedulable {
+	if nodeInfo.Node().Spec.Unschedulable {
 		return false, []PredicateFailureReason{ErrNodeUnschedulable}, nil
 	}
 
