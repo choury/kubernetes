@@ -21,12 +21,12 @@ import (
 	"os"
 	"path"
 
-	"github.com/golang/glog"
 	"k8s.io/api/core/v1"
+	"k8s.io/klog"
 
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubernetes/pkg/util/mount"
-	utilstrings "k8s.io/kubernetes/pkg/util/strings"
+	utilstrings "k8s.io/utils/strings"
 	"k8s.io/kubernetes/pkg/volume"
 	volumehelper "k8s.io/kubernetes/pkg/volume/util"
 )
@@ -203,7 +203,7 @@ func (b *qcloudCbsMounter) SetUp(fsGroup *int64) error {
 func (b *qcloudCbsMounter) SetUpAt(dir string, fsGroup *int64) error {
 
 	notmnt, err := b.mounter.IsLikelyNotMountPoint(dir)
-	glog.V(4).Infof("qcloud cbs SetUp check mount point, dir(%s), cbs disk(%s), error(%v), notmnt(%t)",
+	klog.V(4).Infof("qcloud cbs SetUp check mount point, dir(%s), cbs disk(%s), error(%v), notmnt(%t)",
 		dir, b.diskID, err, notmnt)
 
 	if err != nil && !os.IsNotExist(err) {
@@ -215,39 +215,39 @@ func (b *qcloudCbsMounter) SetUpAt(dir string, fsGroup *int64) error {
 	}
 
 	if err := os.MkdirAll(dir, 0750); err != nil {
-		glog.V(4).Infof("Could not create directory %s: %v", dir, err)
+		klog.V(4).Infof("Could not create directory %s: %v", dir, err)
 		return err
 	}
 
 	options := []string{"bind"}
 	globalPDPath := makeGlobalPDPath(b.plugin.host, b.diskID)
 
-	glog.V(4).Infof("attempting to mount %s to %s", globalPDPath, dir)
+	klog.V(4).Infof("attempting to mount %s to %s", globalPDPath, dir)
 	err = b.mounter.Mount(globalPDPath, dir, "", options)
 
 	if err != nil {
 		notmnt, mntErr := b.mounter.IsLikelyNotMountPoint(dir)
 		if mntErr != nil {
-			glog.Errorf("IsLikelyNotMountPoint check failed: %v", mntErr)
+			klog.Errorf("IsLikelyNotMountPoint check failed: %v", mntErr)
 			return err
 		}
 		if !notmnt {
 			if mntErr = b.mounter.Unmount(dir); mntErr != nil {
-				glog.Errorf("Failed to unmount: %v", mntErr)
+				klog.Errorf("Failed to unmount: %v", mntErr)
 				return err
 			}
 			notmnt, mntErr := b.mounter.IsLikelyNotMountPoint(dir)
 			if mntErr != nil {
-				glog.Errorf("IsLikelyNotMountPoint check failed: %v", mntErr)
+				klog.Errorf("IsLikelyNotMountPoint check failed: %v", mntErr)
 				return err
 			}
 			if !notmnt {
-				glog.Errorf("%s is still mounted, despite call to unmount().  Will try again next sync loop.", b.GetPath())
+				klog.Errorf("%s is still mounted, despite call to unmount().  Will try again next sync loop.", b.GetPath())
 				return err
 			}
 		}
 
-		glog.Infof("mount %s failed: %v", dir, err)
+		klog.Infof("mount %s failed: %v", dir, err)
 		os.Remove(dir)
 		return err
 	}
@@ -256,7 +256,7 @@ func (b *qcloudCbsMounter) SetUpAt(dir string, fsGroup *int64) error {
 		volume.SetVolumeOwnership(b, fsGroup)
 	}
 
-	glog.V(3).Infof("cbs volume %s mounted to %s succeded", b.diskID, dir)
+	klog.V(3).Infof("cbs volume %s mounted to %s succeded", b.diskID, dir)
 
 	return nil
 }
@@ -276,7 +276,7 @@ func (v *qcloudCbsUnmounter) TearDown() error {
 // Unmounts the bind mount, and detaches the disk only if the PD
 // resource was the last reference to that disk on the kubelet.
 func (v *qcloudCbsUnmounter) TearDownAt(dir string) error {
-	glog.V(3).Infof("qcloud cbs TearDown of %s", dir)
+	klog.V(3).Infof("qcloud cbs TearDown of %s", dir)
 	notMnt, err := v.mounter.IsLikelyNotMountPoint(dir)
 	if err != nil {
 		return err
@@ -289,7 +289,7 @@ func (v *qcloudCbsUnmounter) TearDownAt(dir string) error {
 	}
 	notMnt, mntErr := v.mounter.IsLikelyNotMountPoint(dir)
 	if mntErr != nil {
-		glog.Errorf("IsLikelyNotMountPoint check failed: %v", mntErr)
+		klog.Errorf("IsLikelyNotMountPoint check failed: %v", mntErr)
 		return err
 	}
 	if notMnt {
@@ -305,7 +305,7 @@ func makeGlobalPDPath(host volume.VolumeHost, devName string) string {
 
 func (vv *qcloudCbs) GetPath() string {
 	return vv.plugin.host.GetPodVolumeDir(vv.podUID,
-		utilstrings.EscapeQualifiedNameForDisk(qcloudCbsPluginName), vv.volName)
+		utilstrings.EscapeQualifiedName(qcloudCbsPluginName), vv.volName)
 }
 
 func (plugin *qcloudDiskPlugin) GetAccessModes() []v1.PersistentVolumeAccessMode {

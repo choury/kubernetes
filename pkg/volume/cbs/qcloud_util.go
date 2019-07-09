@@ -22,11 +22,11 @@ import (
 	"time"
 
 	qcloud "cloud.tencent.com/tencent-cloudprovider/provider"
-	"github.com/golang/glog"
 	//"k8s.io/kubernetes/pkg/api/v1"
-	"k8s.io/kubernetes/pkg/cloudprovider"
+	"k8s.io/cloud-provider"
+	"k8s.io/klog"
 	//"k8s.io/kubernetes/pkg/volume"
-	volumeutil "k8s.io/kubernetes/pkg/volume/util"
+	"k8s.io/kubernetes/pkg/util/mount"
 )
 
 const (
@@ -41,7 +41,7 @@ var ErrProbeVolume = errors.New("Error scanning attached volumes")
 type QcloudCbsUtil struct{}
 
 func verifyDevicePath(path string) (string, error) {
-	if pathExists, err := volumeutil.PathExists(path); err != nil {
+	if pathExists, err := mount.PathExists(path); err != nil {
 		return "", fmt.Errorf("Error checking if path exists: %v", err)
 	} else if pathExists {
 		return path, nil
@@ -97,7 +97,7 @@ func verifyDevicePath(path string) (string, error) {
 
 func getCloudProvider(cloud cloudprovider.Interface) (*qcloud.QCloud, error) {
 	if cloud == nil {
-		glog.Errorf("Cloud provider not initialized properly")
+		klog.Errorf("Cloud provider not initialized properly")
 		return nil, errors.New("Cloud provider not initialized properly")
 	}
 
