@@ -38,7 +38,7 @@ import (
 
 type qcloudCbsAttacher struct {
 	host        volume.VolumeHost
-	qcloudDisks qcloud.Disks
+	qcloudDisks qcloud.DisksV3
 }
 
 var _ volume.Attacher = &qcloudCbsAttacher{}
@@ -66,7 +66,7 @@ func (attacher *qcloudCbsAttacher) Attach(spec *volume.Spec, hostname types.Node
 
 	glog.V(4).Infof("Attach disk called for host %s", hostName)
 
-	attached, err := attacher.qcloudDisks.DiskIsAttached(diskId, hostname)
+	attached, err := attacher.qcloudDisks.DiskIsAttachedV3(diskId, hostname)
 	if err != nil {
 		glog.Errorf("check cbs disk(%q) is attached to node(%q) error(%v), will continue and try attach anyway",
 			diskId, hostName, err)
@@ -75,7 +75,7 @@ func (attacher *qcloudCbsAttacher) Attach(spec *volume.Spec, hostname types.Node
 	if err == nil && attached {
 		glog.Infof("cbs(%q) is already attached to node(%q), attach return success.", diskId, hostName)
 	} else {
-		if err := attacher.qcloudDisks.AttachDisk(diskId, hostname); err != nil {
+		if err := attacher.qcloudDisks.AttachDiskV3(diskId, hostname); err != nil {
 			glog.Errorf("error attaching cbs(%s) to node(%s): %+v", diskId, hostName, err)
 			return "", err
 		}
@@ -102,7 +102,7 @@ func (attacher *qcloudCbsAttacher) VolumesAreAttached(specs []*volume.Spec, node
 		volumesAttachedCheck[spec] = true
 		volumeDiskIdMap[volumeSource.CbsDiskId] = spec
 	}
-	attachedResult, err := attacher.qcloudDisks.DisksAreAttached(diskIdList, nodename)
+	attachedResult, err := attacher.qcloudDisks.DisksAreAttachedV3(diskIdList, nodename)
 	if err != nil {
 		// Log error and continue with attach
 		glog.Errorf(
@@ -216,7 +216,7 @@ func (attacher *qcloudCbsAttacher) MountDevice(spec *volume.Spec, devicePath str
 
 type qcloudCbsDetacher struct {
 	mounter    mount.Interface
-	qcloudDisk qcloud.Disks
+	qcloudDisk qcloud.DisksV3
 }
 
 var _ volume.Detacher = &qcloudCbsDetacher{}
@@ -241,7 +241,7 @@ func (detacher *qcloudCbsDetacher) Detach(deviceMountPath string, hostname types
 	//TODO
 	diskId := path.Base(deviceMountPath)
 
-	attached, err := detacher.qcloudDisk.DiskIsAttached(diskId, hostname)
+	attached, err := detacher.qcloudDisk.DiskIsAttachedV3(diskId, hostname)
 	if err != nil {
 		// Log error and continue with detach
 		glog.Errorf(
@@ -255,7 +255,7 @@ func (detacher *qcloudCbsDetacher) Detach(deviceMountPath string, hostname types
 		return nil
 	}
 
-	if err = detacher.qcloudDisk.DetachDisk(diskId, hostname); err != nil {
+	if err = detacher.qcloudDisk.DetachDiskV3(diskId); err != nil {
 		glog.Errorf("Error detaching cbs disk(%q) from node(%q): %v", diskId, hostName, err)
 		return err
 	}
@@ -273,6 +273,7 @@ func (detacher *qcloudCbsDetacher) WaitForDetach(devicePath string, timeout time
 		select {
 		case <-ticker.C:
 			glog.V(5).Infof("Checking device %q is detached.", devicePath)
+			// TODO udev bug maybe need find /sys/block/vdx/serial
 			if pathExists, err := volumeutil.PathExists(devicePath); err != nil {
 				return fmt.Errorf("Error checking if device path exists: %v", err)
 			} else if !pathExists {
