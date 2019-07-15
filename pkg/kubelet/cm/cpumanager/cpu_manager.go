@@ -97,8 +97,11 @@ type manager struct {
 var _ Manager = &manager{}
 
 // NewManager creates new cpu manager based on provided policy
-func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo *cadvisorapi.MachineInfo, nodeAllocatableReservation v1.ResourceList, stateFileDirectory string) (Manager, error) {
+func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo *cadvisorapi.MachineInfo, nodeAllocatableReservation v1.ResourceList, stateFileDirectory string, cpuReservedEnabled bool) (Manager, error) {
 	var policy Policy
+
+	// Record reserved cpu sets
+	reservedCpus := cpuset.NewCPUSet()
 
 	switch policyName(cpuPolicyName) {
 
@@ -131,12 +134,24 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 		numReservedCPUs := int(math.Ceil(reservedCPUsFloat))
 		policy = NewStaticPolicy(topo, numReservedCPUs)
 
+		// If cpu reserved is enabled, the reserved cores must be integer, or will lead to wrong state for pods with non-integer cpu requests
+		if cpuReservedEnabled {
+			if reservedCPUsFloat != float64(numReservedCPUs) {
+				errMsg := fmt.Sprintf("[cpumanager] static policy with cpu reserved enabled, reserved cores must be integer, but is %f\n", reservedCPUsFloat)
+				klog.Error(errMsg)
+				panic(errMsg)
+			}
+
+			// Record reserved cpu sets
+			reservedCpus = policy.(*staticPolicy).reserved
+		}
+
 	default:
 		klog.Errorf("[cpumanager] Unknown policy \"%s\", falling back to default policy \"%s\"", cpuPolicyName, PolicyNone)
 		policy = NewNonePolicy()
 	}
 
-	stateImpl, err := state.NewCheckpointState(stateFileDirectory, cpuManagerStateFileName, policy.Name())
+	stateImpl, err := state.NewCheckpointState(stateFileDirectory, cpuManagerStateFileName, policy.Name(), reservedCpus)
 	if err != nil {
 		return nil, fmt.Errorf("could not initialize checkpoint manager: %v", err)
 	}

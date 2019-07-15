@@ -123,6 +123,7 @@ type NodeConfig struct {
 	ExperimentalPodPidsLimit              int64
 	EnforceCPULimits                      bool
 	CPUCFSQuotaPeriod                     time.Duration
+	CPUReservedEnabled                    bool
 }
 
 type NodeAllocatableConfig struct {

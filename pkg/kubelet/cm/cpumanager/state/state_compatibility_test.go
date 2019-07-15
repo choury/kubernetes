@@ -48,7 +48,7 @@ func TestFileToCheckpointCompatibility(t *testing.T) {
 	fileState.SetDefaultCPUSet(state.defaultCPUSet)
 	fileState.SetCPUAssignments(state.assignments)
 
-	restoredState, err := NewCheckpointState(testingDir, compatibilityTestingCheckpoint, "none")
+	restoredState, err := NewCheckpointState(testingDir, compatibilityTestingCheckpoint, "none", cpuset.NewCPUSet())
 	if err != nil {
 		t.Fatalf("could not restore file state: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestCheckpointToFileCompatibility(t *testing.T) {
 	// ensure testing checkpoint is removed after testing
 	defer cpm.RemoveCheckpoint(compatibilityTestingCheckpoint)
 
-	checkpointState, err := NewCheckpointState(testingDir, compatibilityTestingCheckpoint, "none")
+	checkpointState, err := NewCheckpointState(testingDir, compatibilityTestingCheckpoint, "none", cpuset.NewCPUSet())
 
 	checkpointState.SetDefaultCPUSet(state.defaultCPUSet)
 	checkpointState.SetCPUAssignments(state.assignments)
