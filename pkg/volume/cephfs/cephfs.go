@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -245,23 +245,10 @@ func (cephfsVolume *cephfsMounter) SetUpAt(dir string, fsGroup *int64) error {
 	if cephfsVolume.checkFuseMount() {
 		klog.V(4).Info("CephFS fuse mount.")
 		err = cephfsVolume.execFuseMount(dir)
-		// cleanup no matter if fuse mount fail.
-		keyringPath := cephfsVolume.GetKeyringPath()
-		_, StatErr := os.Stat(keyringPath)
-		if !os.IsNotExist(StatErr) {
-			os.RemoveAll(keyringPath)
-		}
-		if err == nil {
-			// cephfs fuse mount succeeded.
-			return nil
-		}
-		// if cephfs fuse mount failed, fallback to kernel mount.
-		klog.V(2).Infof("CephFS fuse mount failed: %v, fallback to kernel mount.", err)
-
+	}else{
+		klog.V(4).Info("CephFS kernel mount.")
+		err = cephfsVolume.execMount(dir)
 	}
-	klog.V(4).Info("CephFS kernel mount.")
-
-	err = cephfsVolume.execMount(dir)
 	if err != nil {
 		// cleanup upon failure.
 		mount.CleanupMountPoint(dir, cephfsVolume.mounter, false)
@@ -292,12 +279,15 @@ func (cephfsVolume *cephfs) GetPath() string {
 	return cephfsVolume.plugin.host.GetPodVolumeDir(cephfsVolume.podUID, utilstrings.EscapeQualifiedName(name), cephfsVolume.volName)
 }
 
-// GetKeyringPath creates cephfuse keyring path
-func (cephfsVolume *cephfs) GetKeyringPath() string {
+// getKeyringPath creates cephfuse keyring file name
+func (cephfsVolume *cephfs) getKeyringFileName() string {
+	return fmt.Sprintf("%s-%s.keyring", cephfsVolume.volName, cephfsVolume.id)
+}
+
+// GetConfigPath creates cephfuse config path
+func (cephfsVolume *cephfs) getConfigPath() string {
 	name := cephfsPluginName
-	volumeDir := cephfsVolume.plugin.host.GetPodVolumeDir(cephfsVolume.podUID, utilstrings.EscapeQualifiedName(name), cephfsVolume.volName)
-	volumeKeyringDir := volumeDir + "~keyring"
-	return volumeKeyringDir
+	return cephfsVolume.plugin.host.GetPodPluginDir(cephfsVolume.podUID, utilstrings.EscapeQualifiedName(name))
 }
 
 func (cephfsVolume *cephfs) execMount(mountpoint string) error {
@@ -339,8 +329,8 @@ func (cephfsVolume *cephfsMounter) checkFuseMount() bool {
 	execute := cephfsVolume.plugin.host.GetExec(cephfsVolume.plugin.GetPluginName())
 	switch runtime.GOOS {
 	case "linux":
-		if _, err := execute.Run("/usr/bin/test", "-x", "/sbin/mount.fuse.ceph"); err == nil {
-			klog.V(4).Info("/sbin/mount.fuse.ceph exists, it should be fuse mount.")
+		if _, err := execute.Run("ceph-fuse", "--version"); err == nil {
+			klog.V(4).Infof("ceph-fuse exists, it should be fuse mount.")
 			return true
 		}
 		return false
@@ -349,66 +339,64 @@ func (cephfsVolume *cephfsMounter) checkFuseMount() bool {
 }
 
 func (cephfsVolume *cephfs) execFuseMount(mountpoint string) error {
+	// make dir for ceph-fuse config file
+	configPath := cephfsVolume.getConfigPath()
+	os.MkdirAll(configPath, 0750)
 	// cephfs keyring file
 	keyringFile := ""
+	payload := make(map[string]util.FileProjection, 2)
 	// override secretfile if secret is provided
 	if cephfsVolume.secret != "" {
 		// TODO: cephfs fuse currently doesn't support secret option,
 		// remove keyring file create once secret option is supported.
 		klog.V(4).Info("cephfs mount begin using fuse.")
-
-		keyringPath := cephfsVolume.GetKeyringPath()
-		os.MkdirAll(keyringPath, 0750)
-
-		payload := make(map[string]util.FileProjection, 1)
 		var fileProjection util.FileProjection
 
 		keyring := fmt.Sprintf("[client.%s]\nkey = %s\n", cephfsVolume.id, cephfsVolume.secret)
 
 		fileProjection.Data = []byte(keyring)
 		fileProjection.Mode = int32(0644)
-		fileName := cephfsVolume.id + ".keyring"
 
+		fileName := cephfsVolume.getKeyringFileName()
 		payload[fileName] = fileProjection
-
-		writerContext := fmt.Sprintf("cephfuse:%v.keyring", cephfsVolume.id)
-		writer, err := util.NewAtomicWriter(keyringPath, writerContext)
-		if err != nil {
-			klog.Errorf("failed to create atomic writer: %v", err)
-			return err
-		}
-
-		err = writer.Write(payload)
-		if err != nil {
-			klog.Errorf("failed to write payload to dir: %v", err)
-			return err
-		}
-
-		keyringFile = path.Join(keyringPath, fileName)
-
+		keyringFile = filepath.Join(configPath, fileName)
 	} else {
 		keyringFile = cephfsVolume.secretFile
 	}
 
-	// build src like mon1:6789,mon2:6789,mon3:6789:/
-	hosts := cephfsVolume.mon
-	l := len(hosts)
-	// pass all monitors and let ceph randomize and fail over
-	i := 0
-	src := ""
-	for i = 0; i < l-1; i++ {
-		src += hosts[i] + ","
+	configArgs := []string{}
+	configArgs = append(configArgs, fmt.Sprintf("[client.%s]", cephfsVolume.id))
+	configArgs = append(configArgs, fmt.Sprintf("mon_host = %s", strings.Join(cephfsVolume.mon, ",")))
+	configArgs = append(configArgs, fmt.Sprintf("keyring = %s", keyringFile))
+	configArgs = append(configArgs, fmt.Sprintf("client_mountpoint = %s", cephfsVolume.path))
+	configArgs = append(configArgs, "client_reconnect_stale = true")
+	configArgs = append(configArgs, fmt.Sprintf("admin_socket = %s",
+		filepath.Join("/run/", fmt.Sprintf("ceph-%s-%s", cephfsVolume.podUID, cephfsVolume.volName))))
+	configArgs = append(configArgs, fmt.Sprintf("log_file = %s",
+		filepath.Join(configPath, fmt.Sprintf("ceph-fuse-%s-%s.%s.log", cephfsVolume.podUID, cephfsVolume.volName, cephfsVolume.id))))
+	// For last new line
+	configArgs = append(configArgs, "")
+	configFileName := fmt.Sprintf("ceph-%s.conf", cephfsVolume.volName)
+	var fileProjection util.FileProjection
+	fileProjection.Data = []byte(strings.Join(configArgs, "\n"))
+	fileProjection.Mode = int32(0644)
+	payload[configFileName] = fileProjection
+	writerContext := fmt.Sprintf("cephfuse:%s-%s.config", cephfsVolume.volName, cephfsVolume.id)
+	writer, err := util.NewAtomicWriter(configPath, writerContext)
+	if err != nil {
+		klog.Errorf("failed to write payload to dir: %v", err)
+		return nil
 	}
-	src += hosts[i]
+	err = writer.Write(payload)
+	if err != nil {
+		klog.Errorf("failed to write payload to dir: %v", err)
+		return err
+ 	}
 
 	mountArgs := []string{}
-	mountArgs = append(mountArgs, "-k")
-	mountArgs = append(mountArgs, keyringFile)
-	mountArgs = append(mountArgs, "-m")
-	mountArgs = append(mountArgs, src)
 	mountArgs = append(mountArgs, mountpoint)
-	mountArgs = append(mountArgs, "-r")
-	mountArgs = append(mountArgs, cephfsVolume.path)
+	mountArgs = append(mountArgs, "-c")
+	mountArgs = append(mountArgs, filepath.Join(configPath, configFileName))
 	mountArgs = append(mountArgs, "--id")
 	mountArgs = append(mountArgs, cephfsVolume.id)
 

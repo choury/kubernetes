@@ -616,6 +616,10 @@ func (util *RBDUtil) CreateImage(p *rbdVolumeProvisioner) (r *v1.RBDPersistentVo
 func (util *RBDUtil) DeleteImage(p *rbdVolumeDeleter) error {
 	var output []byte
 	found, rbdOutput, err := util.rbdStatus(p.rbdMounter)
+	if strings.Contains(rbdOutput, fmt.Sprintf("rbd: error opening image %s: (2) No such file or directory", p.rbdMounter.Image)) {
+		//The rbd image is not exist, so treat as succeed.
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("error %v, rbd output: %v", err, rbdOutput)
 	}
