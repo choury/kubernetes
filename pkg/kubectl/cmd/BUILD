@@ -236,6 +236,7 @@ go_test(
         "//vendor/github.com/spf13/cobra:go_default_library",
         "//vendor/gopkg.in/yaml.v2:go_default_library",
         "//vendor/k8s.io/utils/exec:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
     ],
 )
 

@@ -289,7 +289,8 @@ func (o *CopyOptions) copyFromPod(src, dest fileSpec) error {
 
 	go func() {
 		defer outStream.Close()
-		o.execute(options)
+		err := o.execute(options)
+		cmdutil.CheckErr(err)
 	}()
 	prefix := getPrefix(src.File)
 	prefix = path.Clean(prefix)
@@ -302,6 +303,18 @@ func (o *CopyOptions) copyFromPod(src, dest fileSpec) error {
 // stripPathShortcuts removes any leading or trailing "../" from a given path
 func stripPathShortcuts(p string) string {
 	newPath := path.Clean(p)
+	trimmed := strings.TrimPrefix(newPath, "../")
+
+	for trimmed != newPath {
+		newPath = trimmed
+		trimmed = strings.TrimPrefix(newPath, "../")
+	}
+
+	// trim leftover {".", ".."}
+	if newPath == "." || newPath == ".." {
+		newPath = ""
+	}
+
 	if len(newPath) > 0 && string(newPath[0]) == "/" {
 		return newPath[1:]
 	}
@@ -320,65 +333,71 @@ func makeTar(srcPath, destPath string, writer io.Writer) error {
 }
 
 func recursiveTar(srcBase, srcFile, destBase, destFile string, tw *tar.Writer) error {
-	filepath := path.Join(srcBase, srcFile)
-	stat, err := os.Lstat(filepath)
+	srcPath := path.Join(srcBase, srcFile)
+	matchedPaths, err := filepath.Glob(srcPath)
 	if err != nil {
 		return err
 	}
-	if stat.IsDir() {
-		files, err := ioutil.ReadDir(filepath)
+	for _, fpath := range matchedPaths {
+		stat, err := os.Lstat(fpath)
 		if err != nil {
 			return err
 		}
-		if len(files) == 0 {
-			//case empty directory
-			hdr, _ := tar.FileInfoHeader(stat, filepath)
+		if stat.IsDir() {
+			files, err := ioutil.ReadDir(fpath)
+			if err != nil {
+				return err
+			}
+			if len(files) == 0 {
+				//case empty directory
+				hdr, _ := tar.FileInfoHeader(stat, fpath)
+				hdr.Name = destFile
+				if err := tw.WriteHeader(hdr); err != nil {
+					return err
+				}
+			}
+			for _, f := range files {
+				if err := recursiveTar(srcBase, path.Join(srcFile, f.Name()), destBase, path.Join(destFile, f.Name()), tw); err != nil {
+					return err
+				}
+			}
+			return nil
+		} else if stat.Mode()&os.ModeSymlink != 0 {
+			//case soft link
+			hdr, _ := tar.FileInfoHeader(stat, fpath)
+			target, err := os.Readlink(fpath)
+			if err != nil {
+				return err
+			}
+
+			hdr.Linkname = target
 			hdr.Name = destFile
 			if err := tw.WriteHeader(hdr); err != nil {
 				return err
 			}
-		}
-		for _, f := range files {
-			if err := recursiveTar(srcBase, path.Join(srcFile, f.Name()), destBase, path.Join(destFile, f.Name()), tw); err != nil {
+		} else {
+			//case regular file or other file type like pipe
+			hdr, err := tar.FileInfoHeader(stat, fpath)
+			if err != nil {
 				return err
 			}
-		}
-		return nil
-	} else if stat.Mode()&os.ModeSymlink != 0 {
-		//case soft link
-		hdr, _ := tar.FileInfoHeader(stat, filepath)
-		target, err := os.Readlink(filepath)
-		if err != nil {
-			return err
-		}
+			hdr.Name = destFile
 
-		hdr.Linkname = target
-		hdr.Name = destFile
-		if err := tw.WriteHeader(hdr); err != nil {
-			return err
-		}
-	} else {
-		//case regular file or other file type like pipe
-		hdr, err := tar.FileInfoHeader(stat, filepath)
-		if err != nil {
-			return err
-		}
-		hdr.Name = destFile
+			if err := tw.WriteHeader(hdr); err != nil {
+				return err
+			}
 
-		if err := tw.WriteHeader(hdr); err != nil {
-			return err
-		}
+			f, err := os.Open(fpath)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
 
-		f, err := os.Open(filepath)
-		if err != nil {
-			return err
+			if _, err := io.Copy(tw, f); err != nil {
+				return err
+			}
+			return f.Close()
 		}
-		defer f.Close()
-
-		if _, err := io.Copy(tw, f); err != nil {
-			return err
-		}
-		return f.Close()
 	}
 	return nil
 }
@@ -389,9 +408,7 @@ func clean(fileName string) string {
 	return path.Clean(string(os.PathSeparator) + fileName)
 }
 
-func untarAll(reader io.Reader, destFile, prefix string) error {
-	entrySeq := -1
-
+func untarAll(reader io.Reader, destDir, prefix string) error {
 	// TODO: use compression here?
 	tarReader := tar.NewReader(reader)
 	for {
@@ -402,38 +419,60 @@ func untarAll(reader io.Reader, destFile, prefix string) error {
 			}
 			break
 		}
-		entrySeq++
+
+		// All the files will start with the prefix, which is the directory where
+		// they were located on the pod, we need to strip down that prefix, but
+		// if the prefix is missing it means the tar was tempered with.
+		// For the case where prefix is empty we need to ensure that the path
+		// is not absolute, which also indicates the tar file was tempered with.
+		if !strings.HasPrefix(header.Name, prefix) {
+			return fmt.Errorf("tar contents corrupted")
+		}
+
+		// basic file information
 		mode := header.FileInfo().Mode()
-		outFileName := path.Join(destFile, clean(header.Name[len(prefix):]))
-		baseName := path.Dir(outFileName)
+		destFileName := path.Join(destDir, header.Name[len(prefix):])
+		baseName := path.Dir(destFileName)
+
 		if err := os.MkdirAll(baseName, 0755); err != nil {
 			return err
 		}
 		if header.FileInfo().IsDir() {
-			if err := os.MkdirAll(outFileName, 0755); err != nil {
+			if err := os.MkdirAll(destFileName, 0755); err != nil {
 				return err
 			}
 			continue
 		}
 
-		// handle coping remote file into local directory
-		if entrySeq == 0 && !header.FileInfo().IsDir() {
-			exists, err := dirExists(outFileName)
-			if err != nil {
-				return err
-			}
-			if exists {
-				outFileName = filepath.Join(outFileName, path.Base(clean(header.Name)))
-			}
+		// We need to ensure that the destination file is always within boundries
+		// of the destination directory. This prevents any kind of path traversal
+		// from within tar archive.
+		dir, file := filepath.Split(destFileName)
+		evaledPath, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			return err
+		}
+		// For scrutiny we verify both the actual destination as well as we follow
+		// all the links that might lead outside of the destination directory.
+		if !isDestRelative(destDir, destFileName) || !isDestRelative(destDir, filepath.Join(evaledPath, file)) {
+			fmt.Sprintf("warning: link %q is pointing to %q which is outside target destination, skipping\n", destFileName, header.Linkname)
+			continue
 		}
 
 		if mode&os.ModeSymlink != 0 {
-			err := os.Symlink(header.Linkname, outFileName)
-			if err != nil {
+			linkname := header.Linkname
+			// We need to ensure that the link destination is always within boundries
+			// of the destination directory. This prevents any kind of path traversal
+			// from within tar archive.
+			if !isDestRelative(destDir, linkJoin(destFileName, linkname)) {
+				fmt.Sprintf("warning: link %q is pointing to %q which is outside target destination, skipping\n", destFileName, header.Linkname)
+				continue
+			}
+			if err := os.Symlink(linkname, destFileName); err != nil {
 				return err
 			}
 		} else {
-			outFile, err := os.Create(outFileName)
+			outFile, err := os.Create(destFileName)
 			if err != nil {
 				return err
 			}
@@ -447,11 +486,6 @@ func untarAll(reader io.Reader, destFile, prefix string) error {
 		}
 	}
 
-	if entrySeq == -1 {
-		//if no file was copied
-		errInfo := fmt.Sprintf("error: %s no such file or directory", prefix)
-		return errors.New(errInfo)
-	}
 	return nil
 }
 
@@ -482,14 +516,25 @@ func (o *CopyOptions) execute(options *ExecOptions) error {
 	return nil
 }
 
-// dirExists checks if a path exists and is a directory.
-func dirExists(path string) (bool, error) {
-	fi, err := os.Stat(path)
-	if err == nil && fi.IsDir() {
-		return true, nil
+// isDestRelative returns true if dest is pointing outside the base directory,
+// false otherwise.
+func isDestRelative(base, dest string) bool {
+	fullPath := dest
+	if !filepath.IsAbs(dest) {
+		fullPath = filepath.Join(base, dest)
 	}
-	if os.IsNotExist(err) {
-		return false, nil
+	relative, err := filepath.Rel(base, fullPath)
+	if err != nil {
+		return false
 	}
-	return false, err
+	return relative == "." || relative == stripPathShortcuts(relative)
+}
+
+// linkJoin joins base and link to get the final path to be created.
+// It will consider whether link is an absolute path or not when returning result.
+func linkJoin(base, link string) string {
+	if filepath.IsAbs(link) {
+		return link
+	}
+	return filepath.Join(base, link)
 }
