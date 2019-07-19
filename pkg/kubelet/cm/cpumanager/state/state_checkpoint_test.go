@@ -159,7 +159,7 @@ func TestCheckpointStateRestore(t *testing.T) {
 				}
 			}
 
-			restoredState, err := NewCheckpointState(testingDir, testingCheckpoint, tc.policyName)
+			restoredState, err := NewCheckpointState(testingDir, testingCheckpoint, tc.policyName, cpuset.NewCPUSet())
 			if err != nil {
 				if strings.TrimSpace(tc.expectedError) != "" {
 					tc.expectedError = "could not restore state from checkpoint: " + tc.expectedError
@@ -206,7 +206,7 @@ func TestCheckpointStateStore(t *testing.T) {
 			// ensure there is no previous checkpoint
 			cpm.RemoveCheckpoint(testingCheckpoint)
 
-			cs1, err := NewCheckpointState(testingDir, testingCheckpoint, "none")
+			cs1, err := NewCheckpointState(testingDir, testingCheckpoint, "none", cpuset.NewCPUSet())
 			if err != nil {
 				t.Fatalf("could not create testing checkpointState instance: %v", err)
 			}
@@ -216,7 +216,7 @@ func TestCheckpointStateStore(t *testing.T) {
 			cs1.SetCPUAssignments(tc.expectedState.assignments)
 
 			// restore checkpoint with previously stored values
-			cs2, err := NewCheckpointState(testingDir, testingCheckpoint, "none")
+			cs2, err := NewCheckpointState(testingDir, testingCheckpoint, "none", cpuset.NewCPUSet())
 			if err != nil {
 				t.Fatalf("could not create testing checkpointState instance: %v", err)
 			}
@@ -266,7 +266,7 @@ func TestCheckpointStateHelpers(t *testing.T) {
 			// ensure there is no previous checkpoint
 			cpm.RemoveCheckpoint(testingCheckpoint)
 
-			state, err := NewCheckpointState(testingDir, testingCheckpoint, "none")
+			state, err := NewCheckpointState(testingDir, testingCheckpoint, "none", cpuset.NewCPUSet())
 			if err != nil {
 				t.Fatalf("could not create testing checkpointState instance: %v", err)
 			}
@@ -304,7 +304,7 @@ func TestCheckpointStateClear(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			state, err := NewCheckpointState(testingDir, testingCheckpoint, "none")
+			state, err := NewCheckpointState(testingDir, testingCheckpoint, "none", cpuset.NewCPUSet())
 			if err != nil {
 				t.Fatalf("could not create testing checkpointState instance: %v", err)
 			}

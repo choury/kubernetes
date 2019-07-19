@@ -35,10 +35,11 @@ type stateCheckpoint struct {
 	cache             State
 	checkpointManager checkpointmanager.CheckpointManager
 	checkpointName    string
+	reserved          cpuset.CPUSet
 }
 
 // NewCheckpointState creates new State for keeping track of cpu/pod assignment with checkpoint backend
-func NewCheckpointState(stateDir, checkpointName, policyName string) (State, error) {
+func NewCheckpointState(stateDir, checkpointName, policyName string, reserved cpuset.CPUSet) (State, error) {
 	checkpointManager, err := checkpointmanager.NewCheckpointManager(stateDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize checkpoint manager: %v", err)
@@ -48,6 +49,7 @@ func NewCheckpointState(stateDir, checkpointName, policyName string) (State, err
 		policyName:        policyName,
 		checkpointManager: checkpointManager,
 		checkpointName:    checkpointName,
+		reserved:          reserved,
 	}
 
 	if err := stateCheckpoint.restoreState(); err != nil {
@@ -142,7 +144,14 @@ func (sc *stateCheckpoint) GetCPUSetOrDefault(containerID string) cpuset.CPUSet 
 	sc.mux.RLock()
 	defer sc.mux.RUnlock()
 
-	return sc.cache.GetCPUSetOrDefault(containerID)
+	originCpus := sc.cache.GetCPUSetOrDefault(containerID)
+	noReserved := originCpus.Difference(sc.reserved)
+	if noReserved.IsEmpty() {
+		// This should happen only for best-effort pods
+		return originCpus
+	} else {
+		return noReserved
+	}
 }
 
 // GetCPUAssignments returns current CPU to pod assignments
