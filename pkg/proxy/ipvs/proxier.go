@@ -313,7 +313,7 @@ func NewProxier(ipt utiliptables.Interface,
 	}
 
 	// Set the conntrack sysctl we need for
-	if val, _ := sysctl.GetSysctl(sysctlVSConnTrack); val != 1 {
+	if val, err := sysctl.GetSysctl(sysctlVSConnTrack); err == nil && val != 1 {
 		if err := sysctl.SetSysctl(sysctlVSConnTrack, 1); err != nil {
 			return nil, fmt.Errorf("can't set sysctl %s: %v", sysctlVSConnTrack, err)
 		}
