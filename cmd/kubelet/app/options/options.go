@@ -210,6 +210,8 @@ type KubeletFlags struct {
 	HostIPCSources []string
 	// Isolate cores for system via cpuset, the pods cannot use cores which reserved for system.
 	CPUReservedEnabled bool
+	// Ignore metrics for cadvisor not collect
+	IgnoreMetrics []string
 }
 
 // NewKubeletFlags will create a new KubeletFlags with default values
@@ -427,6 +429,7 @@ func (f *KubeletFlags) AddFlags(mainfs *pflag.FlagSet) {
 	fs.StringVar(&f.BootstrapCheckpointPath, "bootstrap-checkpoint-path", f.BootstrapCheckpointPath, "<Warning: Alpha feature> Path to the directory where the checkpoints are stored")
 	fs.Int32Var(&f.NodeStatusMaxImages, "node-status-max-images", f.NodeStatusMaxImages, "<Warning: Alpha feature> The maximum number of images to report in Node.Status.Images. If -1 is specified, no cap will be applied.")
 	fs.BoolVar(&f.CPUReservedEnabled, "cpu-reserved-enabled", f.CPUReservedEnabled, "Isolate cores for system via cpuset, just support static policy and the reserved value must be integer")
+	fs.StringSliceVar(&f.IgnoreMetrics, "ignore-metrics", f.IgnoreMetrics, "A comma separate list of levels of ignore metrics, including cpu,cpuLoad,memory,diskIO,disk,network,accelerator,app")
 
 	// DEPRECATED FLAGS
 	fs.BoolVar(&f.Containerized, "containerized", f.Containerized, "Running kubelet in a container.")

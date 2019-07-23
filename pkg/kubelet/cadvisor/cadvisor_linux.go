@@ -70,7 +70,7 @@ func init() {
 	}
 }
 
-func New(imageFsInfoProvider ImageFsInfoProvider, rootPath string, usingLegacyStats bool) (Interface, error) {
+func New(imageFsInfoProvider ImageFsInfoProvider, rootPath string, usingLegacyStats bool, ignoreMetrics []string) (Interface, error) {
 	sysFs := sysfs.NewRealSysFs()
 
 	includedMetrics := cadvisormetrics.MetricSet{
@@ -84,6 +84,11 @@ func New(imageFsInfoProvider ImageFsInfoProvider, rootPath string, usingLegacySt
 	}
 	if usingLegacyStats {
 		includedMetrics[cadvisormetrics.DiskUsageMetrics] = struct{}{}
+	}
+
+	// Remove ignore metrics
+	for _, m := range ignoreMetrics {
+		delete(includedMetrics, cadvisormetrics.MetricKind(m))
 	}
 
 	// collect metrics for all cgroups
