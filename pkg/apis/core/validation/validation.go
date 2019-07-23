@@ -3463,8 +3463,9 @@ func ValidatePodUpdate(newPod, oldPod *core.Pod) field.ErrorList {
 
 	// validate updateable fields:
 	// 1.  spec.containers[*].image
-	// 2.  spec.initContainers[*].image
-	// 3.  spec.activeDeadlineSeconds
+	// 2.  spec.containers[*].resources
+	// 3.  spec.initContainers[*].image
+	// 4.  spec.activeDeadlineSeconds
 
 	containerErrs, stop := ValidateContainerUpdates(newPod.Spec.Containers, oldPod.Spec.Containers, specPath.Child("containers"))
 	allErrs = append(allErrs, containerErrs...)
@@ -3503,6 +3504,9 @@ func ValidatePodUpdate(newPod, oldPod *core.Pod) field.ErrorList {
 	var newContainers []core.Container
 	for ix, container := range mungedPod.Spec.Containers {
 		container.Image = oldPod.Spec.Containers[ix].Image
+		if utilfeature.DefaultFeatureGate.Enabled(features.InPlaceResourcesUpdate) {
+			container.Resources = oldPod.Spec.Containers[ix].Resources
+		}
 		newContainers = append(newContainers, container)
 	}
 	mungedPod.Spec.Containers = newContainers
@@ -3528,7 +3532,7 @@ func ValidatePodUpdate(newPod, oldPod *core.Pod) field.ErrorList {
 		// This diff isn't perfect, but it's a helluva lot better an "I'm not going to tell you what the difference is".
 		//TODO: Pinpoint the specific field that causes the invalid error after we have strategic merge diff
 		specDiff := diff.ObjectDiff(mungedPod.Spec, oldPod.Spec)
-		allErrs = append(allErrs, field.Forbidden(specPath, fmt.Sprintf("pod updates may not change fields other than `spec.containers[*].image`, `spec.initContainers[*].image`, `spec.activeDeadlineSeconds` or `spec.tolerations` (only additions to existing tolerations)\n%v", specDiff)))
+		allErrs = append(allErrs, field.Forbidden(specPath, fmt.Sprintf("pod updates may not change fields other than `spec.containers[*].image`, `spec.containers[*].resources`(if inplace resources update feature enabled), `spec.initContainers[*].image`, `spec.activeDeadlineSeconds` or `spec.tolerations` (only additions to existing tolerations)\n%v", specDiff)))
 	}
 
 	return allErrs

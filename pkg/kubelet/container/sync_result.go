@@ -36,6 +36,7 @@ var (
 
 var (
 	ErrRunContainer     = errors.New("RunContainerError")
+	ErrUpdateContainer  = errors.New("UpdateContainerError")
 	ErrKillContainer    = errors.New("KillContainerError")
 	ErrVerifyNonRoot    = errors.New("VerifyNonRootError")
 	ErrRunInitContainer = errors.New("RunInitContainerError")
@@ -50,11 +51,12 @@ var (
 )
 
 // SyncAction indicates different kind of actions in SyncPod() and KillPod(). Now there are only actions
-// about start/kill container and setup/teardown network.
+// about start/update/kill container and setup/teardown network.
 type SyncAction string
 
 const (
 	StartContainer   SyncAction = "StartContainer"
+	UpdateContainer  SyncAction = "UpdateContainer"
 	KillContainer    SyncAction = "KillContainer"
 	SetupNetwork     SyncAction = "SetupNetwork"
 	TeardownNetwork  SyncAction = "TeardownNetwork"

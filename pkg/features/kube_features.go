@@ -433,6 +433,13 @@ const (
 	//
 	// Enables the OpenStack Cinder in-tree driver to OpenStack Cinder CSI Driver migration feature.
 	CSIMigrationOpenStack utilfeature.Feature = "CSIMigrationOpenStack"
+
+	// owner: @choury
+	// alpha: v1.8
+	//
+	// Enables the inplace resources update feature.
+	// TODO: Add an admission controller to admin update request in v1.2
+	InPlaceResourcesUpdate utilfeature.Feature = "InPlaceResourcesUpdate"
 )
 
 func init() {
@@ -443,8 +450,8 @@ func init() {
 // To add a new feature, define a key for it above and add it here. The features will be
 // available throughout Kubernetes binaries.
 var defaultKubernetesFeatureGates = map[utilfeature.Feature]utilfeature.FeatureSpec{
-	AppArmor:             {Default: true, PreRelease: utilfeature.Beta},
-	DynamicKubeletConfig: {Default: true, PreRelease: utilfeature.Beta},
+	AppArmor:                                    {Default: true, PreRelease: utilfeature.Beta},
+	DynamicKubeletConfig:                        {Default: true, PreRelease: utilfeature.Beta},
 	ExperimentalHostUserNamespaceDefaultingGate: {Default: false, PreRelease: utilfeature.Beta},
 	ExperimentalCriticalPodAnnotation:           {Default: false, PreRelease: utilfeature.Alpha},
 	DevicePlugins:                               {Default: true, PreRelease: utilfeature.Beta},
@@ -507,6 +514,7 @@ var defaultKubernetesFeatureGates = map[utilfeature.Feature]utilfeature.FeatureS
 	TTLAfterFinished:                            {Default: false, PreRelease: utilfeature.Alpha},
 	KubeletPodResources:                         {Default: false, PreRelease: utilfeature.Alpha},
 	WindowsGMSA:                                 {Default: false, PreRelease: utilfeature.Alpha},
+	InPlaceResourcesUpdate:                      {Default: false, PreRelease: utilfeature.Alpha},
 
 	// inherited features from generic apiserver, relisted here to get a conflict if it is changed
 	// unintentionally on either side:

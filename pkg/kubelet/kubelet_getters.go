@@ -159,6 +159,11 @@ func (kl *Kubelet) getPodResourcesDir() string {
 	return filepath.Join(kl.getRootDir(), config.DefaultKubeletPodResourcesDirName)
 }
 
+// getPodContainerResourceFile returns the file of saving container's resources
+func (kl *Kubelet) getPodContainerResourceFile(podUID types.UID, ctrName string) string {
+	return filepath.Join(kl.getPodContainerDir(podUID, ctrName), config.DefaultKubeletResourcesFileName)
+}
+
 // GetPods returns all pods bound to the kubelet and their spec, and the mirror
 // pods.
 func (kl *Kubelet) GetPods() []*v1.Pod {

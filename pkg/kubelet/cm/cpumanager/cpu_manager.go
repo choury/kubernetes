@@ -23,7 +23,7 @@ import (
 	"time"
 
 	cadvisorapi "github.com/google/cadvisor/info/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog"
 
@@ -57,6 +57,10 @@ type Manager interface {
 	// container runtime before the first process begins to execute.
 	AddContainer(p *v1.Pod, c *v1.Container, containerID string) error
 
+	// UpdateContainer is called after container's resources has been changed.
+	// It will firstly release the CPUs allocated to the container, and then
+	// reallocate some for it as AddContainer do.
+	UpdateContainer(p *v1.Pod, c *v1.Container, containerID string) error
 	// RemoveContainer is called after Kubelet decides to kill or delete a
 	// container. After this call, the CPU manager stops trying to reconcile
 	// that container and any CPUs dedicated to the container are freed.
@@ -206,6 +210,31 @@ func (m *manager) AddContainer(p *v1.Pod, c *v1.Container, containerID string) e
 		return err
 	}
 	klog.V(5).Infof("[cpumanager] update container resources is skipped due to cpu set is empty")
+	return nil
+}
+
+func (m *manager) UpdateContainer(p *v1.Pod, c *v1.Container, containerID string) error {
+	cpus, err := func() (cpuset.CPUSet, error) {
+		m.Lock()
+		defer m.Unlock()
+		if err := m.policy.RemoveContainer(m.state, containerID); err != nil {
+			klog.Errorf("[cpumanager] UpdateContainer error: %v", err)
+			return cpuset.NewCPUSet(), err
+		}
+		if err := m.policy.AddContainer(m.state, p, c, containerID); err != nil {
+			klog.Errorf("[cpumanager] UpdateContainer error: %v", err)
+			return cpuset.NewCPUSet(), err
+		}
+		return m.state.GetCPUSetOrDefault(containerID), nil
+	}()
+	if err != nil {
+		return err
+	}
+
+	if err := m.updateContainerCPUSet(containerID, cpus); err != nil {
+		klog.Errorf("[cpumanager] UpdateContainer error: %v", err)
+		return err
+	}
 	return nil
 }
 

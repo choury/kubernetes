@@ -127,6 +127,9 @@ type kubeGenericRuntimeManager struct {
 	// Manage RuntimeClass resources.
 	runtimeClassManager *runtimeclass.Manager
 
+	// update the pod cgroup (update resources)
+	containerManager cm.ContainerManager
+
 	// Cache last per-container error message to reduce log spam
 	lastError map[string]string
 
@@ -170,6 +173,7 @@ func NewKubeGenericRuntimeManager(
 	internalLifecycle cm.InternalContainerLifecycle,
 	legacyLogProvider LegacyLogProvider,
 	runtimeClassManager *runtimeclass.Manager,
+	containerManager cm.ContainerManager,
 ) (KubeGenericRuntime, error) {
 	kubeRuntimeManager := &kubeGenericRuntimeManager{
 		recorder:            recorder,
@@ -187,6 +191,7 @@ func NewKubeGenericRuntimeManager(
 		internalLifecycle:   internalLifecycle,
 		legacyLogProvider:   legacyLogProvider,
 		runtimeClassManager: runtimeClassManager,
+		containerManager:    containerManager,
 		lastError:           make(map[string]string),
 		errorPrinted:        make(map[string]time.Time),
 	}
@@ -368,6 +373,13 @@ func (m *kubeGenericRuntimeManager) GetPods(all bool) ([]*kubecontainer.Pod, err
 	return result, nil
 }
 
+// containerToUpdateInfo contains necessary information to update container's resources
+type containerToUpdateInfo struct {
+	container *v1.Container
+	name      string
+	resources *runtimeapi.LinuxContainerResources
+}
+
 // containerToKillInfo contains necessary information to kill a container.
 type containerToKillInfo struct {
 	// The spec of the container.
@@ -400,6 +412,8 @@ type podActions struct {
 	// the key is the container ID of the container, while
 	// the value contains necessary information to kill a container.
 	ContainersToKill map[kubecontainer.ContainerID]containerToKillInfo
+	// ContainersToUpdate keeps a map of containers that need to be updated
+	ContainersToUpdate map[kubecontainer.ContainerID]containerToUpdateInfo
 }
 
 // podSandboxChanged checks whether the spec of the pod is changed and returns
@@ -470,18 +484,42 @@ func containerSucceeded(c *v1.Container, podStatus *kubecontainer.PodStatus) boo
 	return cStatus.ExitCode == 0
 }
 
+func resourceListEqual(A, B v1.ResourceList) bool {
+	if len(A) != len(B) {
+		return false
+	}
+	for n, valueOfA := range A {
+		if valueOfB, ok := B[n]; !ok || valueOfA.Cmp(valueOfB) != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// ResourcesEqual compare two ResourceRequirements
+func ResourcesEqual(A, B *v1.ResourceRequirements) bool {
+	if A == B {
+		return true
+	}
+	if A == nil || B == nil {
+		return false
+	}
+	return resourceListEqual(A.Limits, B.Limits) && resourceListEqual(A.Requests, B.Requests)
+}
+
 // computePodActions checks whether the pod spec has changed and returns the changes if true.
 func (m *kubeGenericRuntimeManager) computePodActions(pod *v1.Pod, podStatus *kubecontainer.PodStatus) podActions {
 	klog.V(5).Infof("Syncing Pod %q: %+v", format.Pod(pod), pod)
 
 	createPodSandbox, attempt, sandboxID := m.podSandboxChanged(pod, podStatus)
 	changes := podActions{
-		KillPod:           createPodSandbox,
-		CreateSandbox:     createPodSandbox,
-		SandboxID:         sandboxID,
-		Attempt:           attempt,
-		ContainersToStart: []int{},
-		ContainersToKill:  make(map[kubecontainer.ContainerID]containerToKillInfo),
+		KillPod:            createPodSandbox,
+		CreateSandbox:      createPodSandbox,
+		SandboxID:          sandboxID,
+		Attempt:            attempt,
+		ContainersToStart:  []int{},
+		ContainersToKill:   make(map[kubecontainer.ContainerID]containerToKillInfo),
+		ContainersToUpdate: make(map[kubecontainer.ContainerID]containerToUpdateInfo),
 	}
 
 	// If we need to (re-)create the pod sandbox, everything will need to be
@@ -585,6 +623,15 @@ func (m *kubeGenericRuntimeManager) computePodActions(pod *v1.Pod, podStatus *ku
 			// If the container failed the liveness probe, we should kill it.
 			message = fmt.Sprintf("Container %s failed liveness probe", container.Name)
 		} else {
+			// We should update the resource of container if it changed
+			if !ResourcesEqual(containerStatus.Resources, &container.Resources) {
+				klog.Infof("Container %q (%q) updated (%+v vs %+v).", container.Name, format.Pod(pod), containerStatus.Resources, container.Resources)
+				changes.ContainersToUpdate[containerStatus.ID] = containerToUpdateInfo{
+					name:      containerStatus.Name,
+					container: &pod.Spec.Containers[idx],
+					resources: m.genearteLinuxContainerResourcesConfig(&container, pod),
+				}
+			}
 			// Keep the container.
 			keepCount++
 			continue
@@ -621,6 +668,7 @@ func (m *kubeGenericRuntimeManager) computePodActions(pod *v1.Pod, podStatus *ku
 //  4. Create sandbox if necessary.
 //  5. Create init containers.
 //  6. Create normal containers.
+//  7. Update conainers that resources changed
 func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontainer.PodStatus, pullSecrets []v1.Secret, backOff *flowcontrol.Backoff) (result kubecontainer.PodSyncResult) {
 	// Step 1: Compute sandbox and container changes.
 	podContainerChanges := m.computePodActions(pod, podStatus)
@@ -790,6 +838,25 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontaine
 				utilruntime.HandleError(fmt.Errorf("container start failed: %v: %s", err, msg))
 			}
 			continue
+		}
+	}
+
+	// Step 7: update container's resources in podContainerChages.ContainersToUpdate.
+	if len(podContainerChanges.ContainersToUpdate) > 0 {
+		//update cgroup config
+		m.containerManager.NewPodContainerManager().Update(pod)
+		for containerID, containerInfo := range podContainerChanges.ContainersToUpdate {
+			updateContainerResult := kubecontainer.NewSyncResult(kubecontainer.UpdateContainer, containerID)
+			result.AddSyncResult(updateContainerResult)
+
+			klog.V(4).Infof("Update container %+v in pod %v", containerInfo.container, format.Pod(pod))
+			if err := m.updateContainer(pod, podStatus, containerInfo.container, containerID, containerInfo.resources); err != nil {
+				updateContainerResult.Fail(kubecontainer.ErrUpdateContainer, err.Error())
+				klog.Errorf("updateContainer %q(id=%q) for pod %q failed: %v", containerInfo.name, containerID, format.Pod(pod), err)
+			}
+		}
+		if err := m.containerManager.NewPodContainerManager().Update(pod); err != nil {
+			klog.Errorf("update cgroup after update failed: %v", err)
 		}
 	}
 

@@ -681,6 +681,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 		kubeDeps.ContainerManager.InternalContainerLifecycle(),
 		legacyLogProvider,
 		klet.runtimeClassManager,
+		klet.containerManager,
 	)
 	if err != nil {
 		return nil, err

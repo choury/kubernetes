@@ -20,8 +20,10 @@ const (
 	// Container event reason list
 	CreatedContainer        = "Created"
 	StartedContainer        = "Started"
+	UpdatedContainer        = "Updated"
 	FailedToCreateContainer = "Failed"
 	FailedToStartContainer  = "Failed"
+	FailedToUpdateContainer = "Failed"
 	KillingContainer        = "Killing"
 	PreemptContainer        = "Preempting"
 	BackOffStartContainer   = "BackOff"
