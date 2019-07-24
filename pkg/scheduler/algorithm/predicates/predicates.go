@@ -19,6 +19,7 @@ package predicates
 import (
 	"errors"
 	"fmt"
+	"k8s.io/kubernetes/pkg/scheduler/api"
 	"os"
 	"regexp"
 	"strconv"
@@ -1517,11 +1518,17 @@ func CheckNodeUnschedulablePredicate(pod *v1.Pod, meta PredicateMetadata, nodeIn
 		return false, []PredicateFailureReason{ErrNodeUnknownCondition}, nil
 	}
 
+	// If pod tolerate unschedulable taint, it's also tolerate `node.Spec.Unschedulable`.
+	podToleratesUnschedulable := v1helper.TolerationsTolerateTaint(pod.Spec.Tolerations, &v1.Taint{
+		Key:    api.TaintNodeUnschedulable,
+		Effect: v1.TaintEffectNoSchedule,
+	})
+
 	// TKE modify here,
 	// origin: If pod tolerate unschedulable taint, it's also tolerate `node.Spec.Unschedulable`
 	// TKE: If pod tolerate unschedulable taint, but it can't  tolerate `node.Spec.Unschedulable`
 	// TODO (k82cn): deprecates `node.Spec.Unschedulable` in 1.13.
-	if nodeInfo.Node().Spec.Unschedulable {
+	if nodeInfo.Node().Spec.Unschedulable && !podToleratesUnschedulable {
 		return false, []PredicateFailureReason{ErrNodeUnschedulable}, nil
 	}
 
