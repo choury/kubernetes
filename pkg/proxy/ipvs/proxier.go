@@ -356,7 +356,7 @@ func NewProxier(ipt utiliptables.Interface,
 	// Set the connection reuse mode
 	if val, _ := sysctl.GetSysctl(sysctlConnReuse); val != 0 {
 		if err := sysctl.SetSysctl(sysctlConnReuse, 0); err != nil {
-			return nil, fmt.Errorf("can't set sysctl %s: %v", sysctlConnReuse, err)
+			klog.Warningf("can't set sysctl %s: %v", sysctlConnReuse, err)
 		}
 	}
 
