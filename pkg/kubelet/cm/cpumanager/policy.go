@@ -19,12 +19,13 @@ package cpumanager
 import (
 	"k8s.io/api/core/v1"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/state"
+	"k8s.io/kubernetes/pkg/kubelet/status"
 )
 
 // Policy implements logic for pod container to CPU assignment.
 type Policy interface {
 	Name() string
-	Start(s state.State)
+	Start(s state.State, podStatusProvider status.PodStatusProvider)
 	// AddContainer call is idempotent
 	AddContainer(s state.State, pod *v1.Pod, container *v1.Container, containerID string) error
 	// RemoveContainer call is idempotent

@@ -35,6 +35,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/state"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/topology"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpuset"
+	"k8s.io/kubernetes/pkg/kubelet/status"
 )
 
 type mockState struct {
@@ -91,7 +92,7 @@ func (p *mockPolicy) Name() string {
 	return "mock"
 }
 
-func (p *mockPolicy) Start(s state.State) {
+func (p *mockPolicy) Start(s state.State, podStatusProvider status.PodStatusProvider) {
 }
 
 func (p *mockPolicy) AddContainer(s state.State, pod *v1.Pod, container *v1.Container, containerID string) error {
@@ -256,6 +257,31 @@ func TestCPUManagerGenerate(t *testing.T) {
 		{
 			description:                "static policy - no CPU resources",
 			cpuPolicyName:              "static",
+			nodeAllocatableReservation: v1.ResourceList{v1.ResourceCPU: *resource.NewQuantity(0, resource.DecimalSI)},
+			expectedError:              fmt.Errorf("the static policy requires systemreserved.cpu + kubereserved.cpu to be greater than zero"),
+		},
+		{
+			description:                "affiliate policy",
+			cpuPolicyName:              "affiliate",
+			nodeAllocatableReservation: v1.ResourceList{v1.ResourceCPU: *resource.NewQuantity(3, resource.DecimalSI)},
+			expectedPolicy:             "affiliate",
+		},
+		{
+			description:                "affiliate policy - broken topology",
+			cpuPolicyName:              "affiliate",
+			nodeAllocatableReservation: v1.ResourceList{},
+			isTopologyBroken:           true,
+			expectedError:              fmt.Errorf("could not detect number of cpus"),
+		},
+		{
+			description:                "affiliate policy - broken reservation",
+			cpuPolicyName:              "affiliate",
+			nodeAllocatableReservation: v1.ResourceList{},
+			expectedError:              fmt.Errorf("unable to determine reserved CPU resources for static policy"),
+		},
+		{
+			description:                "affiliate policy - no CPU resources",
+			cpuPolicyName:              "affiliate",
 			nodeAllocatableReservation: v1.ResourceList{v1.ResourceCPU: *resource.NewQuantity(0, resource.DecimalSI)},
 			expectedError:              fmt.Errorf("the static policy requires systemreserved.cpu + kubereserved.cpu to be greater than zero"),
 		},
