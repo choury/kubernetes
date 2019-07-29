@@ -307,6 +307,13 @@ type ControllerContext struct {
 }
 
 func (c ControllerContext) IsControllerEnabled(name string) bool {
+	// TODO qcloud-cloud-provider needs external service controller.
+	// We have planed to move it to out-of-tree in future.
+	// Hard code to avoid circular references.
+	if c.Cloud.ProviderName() == "qcloud" && name == "service" {
+		return false
+	}
+
 	return genericcontrollermanager.IsControllerEnabled(name, ControllersDisabledByDefault, c.ComponentConfig.Generic.Controllers)
 }
 
@@ -366,7 +373,7 @@ func NewControllerInitializers(loopMode ControllerLoopMode) map[string]InitFunc 
 	controllers["nodeipam"] = startNodeIpamController
 	controllers["nodelifecycle"] = startNodeLifecycleController
 	if loopMode == IncludeCloudLoops {
-		//controllers["service"] = startServiceController
+		controllers["service"] = startServiceController
 		controllers["route"] = startRouteController
 		controllers["cloud-node-lifecycle"] = startCloudNodeLifecycleController
 		// TODO: volume controller into the IncludeCloudLoops only set.
