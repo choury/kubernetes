@@ -154,6 +154,9 @@ type VolumeSource struct {
 	// StorageOS represents a StorageOS volume that is attached to the kubelet's host machine and mounted into the pod
 	// +optional
 	StorageOS *StorageOSVolumeSource
+	// QcloudCbs represents a qcloud cbs data disk mount on the host and bind mount to the pod
+	// +optional
+	QcloudCbs *QcloudCbsVolumeSource
 	// CSI (Container Storage Interface) represents storage that is handled by an external CSI driver (Alpha feature).
 	// +optional
 	CSI *CSIVolumeSource
@@ -235,6 +238,22 @@ type PersistentVolumeSource struct {
 	// CSI (Container Storage Interface) represents storage that is handled by an external CSI driver.
 	// +optional
 	CSI *CSIPersistentVolumeSource
+	// QcloudCbs represents a qcloud cbs data disk mount on the host and bind mount to the pod
+	// +optional
+	QcloudCbs *QcloudCbsVolumeSource
+}
+
+type QcloudCbsVolumeSource struct {
+	// Unique id of the persistent disk resource. Used to identify the disk in Qcloud
+	CbsDiskId string
+	// Filesystem type to mount.
+	// Must be a filesystem type supported by the host operating system.
+	// Ex. "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified.
+	// TODO: how do we prevent errors in the filesystem from compromising the machine
+	FSType string
+	// Optional: Defaults to false (read/write). ReadOnly here will force
+	// the ReadOnly setting in VolumeMounts.
+	ReadOnly bool
 }
 
 type PersistentVolumeClaimVolumeSource struct {
