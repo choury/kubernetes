@@ -98,6 +98,12 @@ func verifyEvents(t *testing.T, expected, actual []*PodLifecycleEvent) {
 	}
 }
 
+func eventsEuqal(expected, actual []*PodLifecycleEvent) bool {
+	sort.Sort(sortableEvents(expected))
+	sort.Sort(sortableEvents(actual))
+	return reflect.DeepEqual(expected, actual)
+}
+
 func TestRelisting(t *testing.T) {
 	testPleg := newTestGenericPLEG()
 	pleg, runtime := testPleg.pleg, testPleg.runtime
@@ -212,14 +218,24 @@ func TestEventChannelFull(t *testing.T) {
 	}
 	pleg.relist()
 	// event channel is full, discard events
-	expected = []*PodLifecycleEvent{
+	expected1 := []*PodLifecycleEvent{
 		{ID: "1234", Type: ContainerRemoved, Data: "c1"},
 		{ID: "1234", Type: ContainerDied, Data: "c2"},
 		{ID: "1234", Type: ContainerStarted, Data: "c3"},
 		{ID: "4567", Type: ContainerRemoved, Data: "c1"},
 	}
+
+	expected2 := []*PodLifecycleEvent{
+		{ID: "1234", Type: ContainerRemoved, Data: "c1"},
+		{ID: "1234", Type: ContainerDied, Data: "c2"},
+		{ID: "4567", Type: ContainerRemoved, Data: "c1"},
+		{ID: "4567", Type: ContainerStarted, Data: "c4"},
+	}
+
 	actual = getEventsFromChannel(ch)
-	verifyEvents(t, expected, actual)
+	if !(eventsEuqal(expected1, actual) || eventsEuqal(expected2, actual)) {
+		t.Errorf("Actual events differ from the expected; diff: %v or diff: %v\n", diff.ObjectDiff(expected1, actual), diff.ObjectDiff(expected2, actual))
+	}
 }
 
 func TestDetectingContainerDeaths(t *testing.T) {
