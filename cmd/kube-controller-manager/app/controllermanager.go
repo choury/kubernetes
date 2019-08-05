@@ -310,7 +310,7 @@ func (c ControllerContext) IsControllerEnabled(name string) bool {
 	// TODO qcloud-cloud-provider needs external service controller.
 	// We have planed to move it to out-of-tree in future.
 	// Hard code to avoid circular references.
-	if c.Cloud.ProviderName() == "qcloud" && name == "service" {
+	if c.Cloud != nil && c.Cloud.ProviderName() == "qcloud" && name == "service" {
 		return false
 	}
 
