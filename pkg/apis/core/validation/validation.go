@@ -635,10 +635,29 @@ func validateVolumeSource(source *core.VolumeSource, fldPath *field.Path, volNam
 		}
 	}
 
+	if source.QcloudCbs != nil {
+		if numVolumes > 0 {
+			allErrs = append(allErrs, field.Forbidden(fldPath.Child("qcloudCbs"),
+				"may not specify more than 1 volume type"))
+		} else {
+			numVolumes++
+			allErrs = append(allErrs,
+				validateQcloudDiskVolumeSource(source.QcloudCbs, fldPath.Child("qcloudCbs"))...)
+		}
+	}
+
 	if numVolumes == 0 {
 		allErrs = append(allErrs, field.Required(fldPath, "must specify a volume type"))
 	}
 
+	return allErrs
+}
+
+func validateQcloudDiskVolumeSource(cbsDisk *core.QcloudCbsVolumeSource, fldPath *field.Path) field.ErrorList {
+	allErrs := field.ErrorList{}
+	if cbsDisk.CbsDiskId == "" {
+		allErrs = append(allErrs, field.Required(fldPath.Child("cbsDiskId"), ""))
+	}
 	return allErrs
 }
 
@@ -1744,6 +1763,17 @@ func ValidatePersistentVolume(pv *core.PersistentVolume) field.ErrorList {
 		} else {
 			numVolumes++
 			allErrs = append(allErrs, validateCSIPersistentVolumeSource(pv.Spec.CSI, specPath.Child("csi"))...)
+		}
+	}
+
+	if pv.Spec.QcloudCbs != nil {
+		if numVolumes > 0 {
+			allErrs = append(allErrs, field.Forbidden(specPath.Child("qcloudCbs"),
+				"may not specify more than 1 volume type"))
+		} else {
+			numVolumes++
+			allErrs = append(allErrs,
+				validateQcloudDiskVolumeSource(pv.Spec.QcloudCbs, specPath.Child("qcloudCbs"))...)
 		}
 	}
 

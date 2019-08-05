@@ -276,6 +276,12 @@ func isVolumeConflict(volume v1.Volume, pod *v1.Pod) bool {
 				return true
 			}
 		}
+
+		if volume.QcloudCbs != nil && existingVolume.QcloudCbs != nil {
+			if volume.QcloudCbs.CbsDiskId == existingVolume.QcloudCbs.CbsDiskId {
+				return true
+			}
+		}
 	}
 
 	return false
