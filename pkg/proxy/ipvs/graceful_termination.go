@@ -167,16 +167,10 @@ func (m *GracefulTerminationManager) deleteRsFunc(rsToDelete *listItem) (bool, e
 		if rsToDelete.RealServer.Equal(rs) {
 			// Delete RS with no connections
 			// For UDP, ActiveConn is always 0
-			if rs.ActiveConn > 0 {
+                        // For TCP, InactiveConn are connections not in ESTABLISHED state.
+			if rs.ActiveConn + rs.InactiveConn != 0 {
 				return false, nil
 			}
-
-			// For TCP, InactiveConn are connections not in ESTABLISHED state.
-			// Delete persistent RS even inactiveConn > 0
-			if rs.InactiveConn > 0 && rsToDelete.VirtualServer.Flags&utilipvs.FlagPersistent != utilipvs.FlagPersistent {
-				return false, nil
-			}
-
 			glog.Infof("Deleting rs: %s", rsToDelete.String())
 			err := m.ipvs.DeleteRealServer(rsToDelete.VirtualServer, rs)
 			if err != nil {
