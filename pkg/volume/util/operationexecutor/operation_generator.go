@@ -781,7 +781,7 @@ func (og *operationGenerator) GenerateUnmountVolumeFunc(
 	var pluginName string
 	if volumeToUnmount.VolumeSpec != nil && useCSIPlugin(og.volumePluginMgr, volumeToUnmount.VolumeSpec) {
 		pluginName = csi.CSIPluginName
-	} else if  strings.Contains(string(volumeToUnmount.VolumeName), "cloud.tencent.com/qcloud-cbs") {
+	} else if strings.Contains(string(volumeToUnmount.VolumeName), "cloud.tencent.com/qcloud-cbs") {
 		pluginName = "cloud.tencent.com/qcloud-cbs"
 	} else {
 		pluginName = volumeToUnmount.PluginName

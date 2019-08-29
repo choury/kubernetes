@@ -20,17 +20,16 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
 
-	"k8s.io/api/core/v1"
-
+	v1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/kubernetes/pkg/util/mount"
 	"k8s.io/klog"
-	utilstrings "k8s.io/utils/strings"
+	"k8s.io/kubernetes/pkg/util/mount"
 	"k8s.io/kubernetes/pkg/volume"
-	"strings"
 	volumehelper "k8s.io/kubernetes/pkg/volume/util"
+	utilstrings "k8s.io/utils/strings"
 )
 
 // This is the primary entrypoint for volume plugins.
@@ -148,16 +147,16 @@ func (plugin *qcloudDiskPlugin) IsMigratedToCSI() bool {
 
 // qcloudCbs volumes are disk resources are attached to the kubelet's host machine and exposed to the pod.
 type qcloudCbs struct {
-	volName     string
-	podUID      types.UID
+	volName string
+	podUID  types.UID
 	// Unique identifier of the volume, used to find the disk resource in the provider.
-	diskID      string
+	diskID string
 	// Filesystem type, optional.
-	fsType      string
+	fsType string
 	// Utility interface that provides API calls to the provider to attach/detach disks.
 	//manager     cbsManager
 	// Mounter interface that provides system calls to mount the global path to the pod local path.
-	mounter     mount.Interface
+	mounter mount.Interface
 	// diskMounter provides the interface that is used to mount the actual block device.
 	diskMounter mount.Interface
 	plugin      *qcloudDiskPlugin
@@ -328,7 +327,7 @@ func (vv *qcloudCbs) GetPath() string {
 }
 
 func getVolumeSource(
-spec *volume.Spec) (*v1.QcloudCbsVolumeSource, bool, error) {
+	spec *volume.Spec) (*v1.QcloudCbsVolumeSource, bool, error) {
 	if spec.Volume != nil && spec.Volume.QcloudCbs != nil {
 		return spec.Volume.QcloudCbs, spec.ReadOnly, nil
 	} else if spec.PersistentVolume != nil &&

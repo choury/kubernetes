@@ -245,7 +245,7 @@ func (cephfsVolume *cephfsMounter) SetUpAt(dir string, fsGroup *int64) error {
 	if cephfsVolume.checkFuseMount() {
 		klog.V(4).Info("CephFS fuse mount.")
 		err = cephfsVolume.execFuseMount(dir)
-	}else{
+	} else {
 		klog.V(4).Info("CephFS kernel mount.")
 		err = cephfsVolume.execMount(dir)
 	}
@@ -391,7 +391,7 @@ func (cephfsVolume *cephfs) execFuseMount(mountpoint string) error {
 	if err != nil {
 		klog.Errorf("failed to write payload to dir: %v", err)
 		return err
- 	}
+	}
 
 	mountArgs := []string{}
 	mountArgs = append(mountArgs, mountpoint)
