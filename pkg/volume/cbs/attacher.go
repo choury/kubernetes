@@ -146,7 +146,7 @@ func (attacher *qcloudCbsAttacher) WaitForAttach(spec *volume.Spec, devicePath s
 	for {
 		select {
 		case <-ticker.C:
-			klog.V(5).Infof("Checking cbs disk is attached", volumeSource.CbsDiskId)
+			klog.V(5).Infof("Checking cbs disk (%q) is attached", volumeSource.CbsDiskId)
 			// TODO because udev or tlinux bug, we maybe traverse /sys/block/vdx/serial to find disk
 			path, err := verifyDevicePath(devicePath)
 			if err != nil {
