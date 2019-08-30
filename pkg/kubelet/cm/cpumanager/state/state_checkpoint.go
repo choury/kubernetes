@@ -149,9 +149,8 @@ func (sc *stateCheckpoint) GetCPUSetOrDefault(containerID string) cpuset.CPUSet 
 	if noReserved.IsEmpty() {
 		// This should happen only for best-effort pods
 		return originCpus
-	} else {
-		return noReserved
 	}
+	return noReserved
 }
 
 // GetCPUAssignments returns current CPU to pod assignments
