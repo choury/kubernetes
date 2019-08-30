@@ -18,11 +18,11 @@ package e2e_node
 
 import (
 	"fmt"
-	"time"
-	"strconv"
 	"io/ioutil"
 	"path"
+	"strconv"
 	"strings"
+	"time"
 
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -59,7 +59,7 @@ func enableInPlaceUpdateInKubelet(f *framework.Framework) *kubeletconfig.Kubelet
 	return oldCfg
 }
 
-func readCgroupInt(path string) (int, error){
+func readCgroupInt(path string) (int, error) {
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return 0, err
@@ -88,7 +88,7 @@ func checkPodCgroup(pod *apiv1.Pod) error {
 	cpuQuota, err := readCgroupInt(path.Join(cgroupSubsystem.MountPoints["cpu"], cgroupFsName, containerID, "cpu.cfs_quota_us"))
 	Expect(err).NotTo(HaveOccurred())
 	cpuExpect := pod.Spec.Containers[0].Resources.Limits.Cpu().Value()
-	if cpuQuota/cpuPeriod !=  int(cpuExpect) {
+	if cpuQuota/cpuPeriod != int(cpuExpect) {
 		return fmt.Errorf("cgroup cpu not equal: %v -> %v", cpuQuota/cpuPeriod, cpuExpect)
 	}
 
@@ -133,7 +133,7 @@ func runPodInPlaceUpdateTests(f *framework.Framework) {
 		Expect(err).NotTo(HaveOccurred())
 
 		By("by update a G pod")
-		f.PodClient().Update(pod.Name, func(pod *apiv1.Pod){
+		f.PodClient().Update(pod.Name, func(pod *apiv1.Pod) {
 			resource := apiv1.ResourceList{
 				apiv1.ResourceName("cpu"):    resource.MustParse("2"),
 				apiv1.ResourceName("memory"): resource.MustParse("50Mi"),

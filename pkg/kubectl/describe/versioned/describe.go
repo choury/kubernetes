@@ -945,13 +945,12 @@ func printISCSIVolumeSource(iscsi *corev1.ISCSIVolumeSource, w PrefixWriter) {
 }
 
 func printQcloudCbsVolumeSource(d *corev1.QcloudCbsVolumeSource, w PrefixWriter) {
-	w.Write(LEVEL_2, "    Type:\tQcloudCbs (QCloud cbs disk mount on the host and bind mount to the pod)\n" +
-		"    CbsDiskId:\t%v\n" +
-		"    FSType:\t%v\n" +
+	w.Write(LEVEL_2, "    Type:\tQcloudCbs (QCloud cbs disk mount on the host and bind mount to the pod)\n"+
+		"    CbsDiskId:\t%v\n"+
+		"    FSType:\t%v\n"+
 		"    ReadOnly:\t%v\n",
 		d.CbsDiskId, d.FSType, d.ReadOnly)
 }
-
 
 func printISCSIPersistentVolumeSource(iscsi *corev1.ISCSIPersistentVolumeSource, w PrefixWriter) {
 	initiatorName := "<none>"

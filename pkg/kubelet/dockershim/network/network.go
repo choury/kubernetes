@@ -24,13 +24,13 @@ import (
 // if there is no value from the config , the name will be set in default value "eth0"
 // there may can provide a interface to get the name from the TKE console
 // if need change the name in runtime , the pods created before changing need restart
-var  DefaultInterfaceName = getInterfaceNameFromEnv()
+var DefaultInterfaceName = getInterfaceNameFromEnv()
 
 // UseDefaultMTU is a marker value that indicates the plugin should determine its own MTU
 // It is the zero value, so a non-initialized value will mean "UseDefault"
 const UseDefaultMTU = 0
 
-func getInterfaceNameFromEnv() string{
+func getInterfaceNameFromEnv() string {
 	interfaceName := os.Getenv("CONTAINER_NETWORK_INTERFACE_NAME")
 	if interfaceName == "" {
 		interfaceName = "eth0"
