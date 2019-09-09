@@ -1157,7 +1157,8 @@ func (proxier *Proxier) syncProxyRules() {
 				serv.Flags |= utilipvs.FlagPersistent
 				serv.Timeout = uint32(svcInfo.StickyMaxAgeSeconds())
 			}
-			if err := proxier.syncService(svcNameString, serv, true); err == nil {
+			// There is no need to bind externalIP to dummy interface, so set parameter `bindAddr` to `false`.
+			if err := proxier.syncService(svcNameString, serv, false); err == nil {
 				activeIPVSServices[serv.String()] = true
 				activeBindAddrs[serv.Address.String()] = true
 				if err := proxier.syncEndpoint(svcName, false, serv); err != nil {
@@ -1258,7 +1259,8 @@ func (proxier *Proxier) syncProxyRules() {
 					serv.Flags |= utilipvs.FlagPersistent
 					serv.Timeout = uint32(svcInfo.StickyMaxAgeSeconds())
 				}
-				if err := proxier.syncService(svcNameString, serv, true); err == nil {
+				// There is no need to bind LB ingress.IP to dummy interface, so set parameter `bindAddr` to `false`.
+				if err := proxier.syncService(svcNameString, serv, false); err == nil {
 					activeIPVSServices[serv.String()] = true
 					activeBindAddrs[serv.Address.String()] = true
 					if err := proxier.syncEndpoint(svcName, svcInfo.OnlyNodeLocalEndpoints(), serv); err != nil {
