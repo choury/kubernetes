@@ -1,0 +1,31 @@
+[Unit]
+Description=Kubernetes Kubelet
+
+[Service]
+EnvironmentFile=-/etc/kubernetes/config
+EnvironmentFile=-/etc/kubernetes/kubelet
+ExecStart=/usr/bin/kubelet \
+${KUBE_MASTER}          \
+${KUBE_LOGTOSTDERR}     \
+${KUBE_LOG_LEVEL}       \
+${NODE_ADDRESS}         \
+${NODE_PORT}            \
+${KUBE_ALLOW_PRIV}      \
+$KUBELET_ARGS
+
+LimitNOFILE=infinity
+LimitNPROC=infinity
+LimitCORE=infinity
+# Uncomment TasksMax if your systemd version supports it.
+# Only systemd 226 and above support this version.
+TasksMax=infinity
+
+Restart=on-failure
+KillMode=process
+
+# set delegate yes so that systemd does not reset the cgroups of docker containers
+Delegate=yes
+
+[Install]
+WantedBy=multi-user.target
+ 
