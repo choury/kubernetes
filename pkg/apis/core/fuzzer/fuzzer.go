@@ -65,6 +65,12 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 				}
 			}
 		},
+		func(j *core.PodRestartOptions, c fuzz.Continue) {
+			if c.RandBool() {
+				period := c.Int63n(30)
+				j.TerminationGracePeriodSeconds = &period
+			}
+		},
 		func(s *core.PodSpec, c fuzz.Continue) {
 			c.FuzzNoCustom(s)
 			// has a default value

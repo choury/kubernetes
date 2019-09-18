@@ -463,6 +463,9 @@ func containerChanged(container *v1.Container, containerStatus *kubecontainer.Co
 }
 
 func shouldRestartOnFailure(pod *v1.Pod, containerStatus *kubecontainer.ContainerStatus) bool {
+	if types.IsPodShutdown(pod.Annotations) {
+		return false
+	}
 	switch pod.Spec.RestartPolicy {
 	case v1.RestartPolicyNever:
 		return false

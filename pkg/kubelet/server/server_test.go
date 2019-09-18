@@ -38,7 +38,7 @@ import (
 	cadvisorapi "github.com/google/cadvisor/info/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/httpstream"
@@ -79,6 +79,7 @@ type fakeKubelet struct {
 	runningPodsFunc     func() ([]*v1.Pod, error)
 	logFunc             func(w http.ResponseWriter, req *http.Request)
 	runFunc             func(podFullName string, uid types.UID, containerName string, cmd []string) ([]byte, error)
+	restartFunc         func(string, types.UID) error
 	getExecCheck        func(string, types.UID, string, []string, remotecommandserver.Options)
 	getAttachCheck      func(string, types.UID, string, remotecommandserver.Options)
 	getPortForwardCheck func(string, string, types.UID, portforward.V4Options)
@@ -141,6 +142,10 @@ func (fk *fakeKubelet) GetHostname() string {
 
 func (fk *fakeKubelet) RunInContainer(podFullName string, uid types.UID, containerName string, cmd []string) ([]byte, error) {
 	return fk.runFunc(podFullName, uid, containerName, cmd)
+}
+
+func (fk *fakeKubelet) RestartPod(podFullName string, podUID types.UID, restartOpts *v1.PodRestartOptions) error {
+	return fk.restartFunc(podFullName, podUID)
 }
 
 type fakeRuntime struct {
@@ -737,6 +742,7 @@ func TestAuthFilters(t *testing.T) {
 			isSubpath(path, "/healthz"),
 			isSubpath(path, "/pods"),
 			isSubpath(path, "/portForward"),
+			isSubpath(path, "/restart"),
 			isSubpath(path, "/run"),
 			isSubpath(path, "/runningpods"),
 			isSubpath(path, "/cri"):

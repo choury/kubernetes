@@ -1678,6 +1678,25 @@ func (kl *Kubelet) GetPortForward(podName, podNamespace string, podUID types.UID
 	return kl.streamingRuntime.GetPortForward(podName, podNamespace, podUID, portForwardOpts.Ports)
 }
 
+// RestartPod restart pod.
+func (kl *Kubelet) RestartPod(podFullName string, podUID types.UID, restartOpts *v1.PodRestartOptions) error {
+	pod, found := kl.podManager.GetPodByUID(podUID)
+	if !found {
+		return fmt.Errorf("RestartPod: %q not found", podUID)
+	}
+
+	pods, err := kl.containerRuntime.GetPods(false)
+	if err != nil {
+		return err
+	}
+
+	// Resolve and type convert back again.
+	// We need the static pod UID but the kubecontainer API works with types.UID.
+	podUID = types.UID(kl.podManager.TranslatePodUID(podUID))
+	runningPod := kubecontainer.Pods(pods).FindPod(podFullName, podUID)
+	return kl.containerRuntime.KillPod(pod, runningPod, restartOpts.TerminationGracePeriodSeconds)
+}
+
 // cleanupOrphanedPodCgroups removes cgroups that should no longer exist.
 // it reconciles the cached state of cgroupPods with the specified list of runningPods
 func (kl *Kubelet) cleanupOrphanedPodCgroups(cgroupPods map[types.UID]cm.CgroupName, activePods []*v1.Pod) {

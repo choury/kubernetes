@@ -1498,6 +1498,15 @@ func (PodReadinessGate) SwaggerDoc() map[string]string {
 	return map_PodReadinessGate
 }
 
+var map_PodRestartOptions = map[string]string{
+	"":       "PodRestartOptions is the query options to a Pod's restart call",
+	"period": "Optional duration in seconds the pod needs to terminate gracefully.",
+}
+
+func (PodRestartOptions) SwaggerDoc() map[string]string {
+	return map_PodRestartOptions
+}
+
 var map_PodSecurityContext = map[string]string{
 	"":                   "PodSecurityContext holds pod-level security attributes and common container settings. Some fields are also present in container.securityContext.  Field values of container.securityContext take precedence over field values of PodSecurityContext.",
 	"seLinuxOptions":     "The SELinux context to be applied to all containers. If unspecified, the container runtime will allocate a random SELinux context for each container.  May also be set in SecurityContext.  If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence for that container.",

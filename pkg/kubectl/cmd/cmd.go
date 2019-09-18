@@ -59,6 +59,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubectl/cmd/portforward"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/proxy"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/replace"
+	"k8s.io/kubernetes/pkg/kubectl/cmd/restart"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/rollingupdate"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/rollout"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/run"
@@ -252,7 +253,7 @@ __custom_func() {
             __kubectl_require_pod_and_container
             return
             ;;
-        kubectl_exec | kubectl_port-forward | kubectl_top_pod | kubectl_attach)
+        kubectl_exec | kubectl_port-forward | kubectl_top_pod | kubectl_attach | kubectl_restart | kubectl_shutdown | kubectl_start))
             __kubectl_get_resource_pod
             return
             ;;
@@ -508,6 +509,9 @@ func NewKubectlCommand(in io.Reader, out, err io.Writer) *cobra.Command {
 				attach.NewCmdAttach(f, ioStreams),
 				cmdexec.NewCmdExec(f, ioStreams),
 				portforward.NewCmdPortForward(f, ioStreams),
+				restart.NewCmdRestart(f, ioStreams),
+				restart.NewCmdShutdown(f, ioStreams),
+				restart.NewCmdStart(f, ioStreams),
 				proxy.NewCmdProxy(f, ioStreams),
 				cp.NewCmdCp(f, ioStreams),
 				auth.NewCmdAuth(f, ioStreams),

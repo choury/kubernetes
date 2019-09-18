@@ -19,7 +19,7 @@ package types
 import (
 	"fmt"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	kubeapi "k8s.io/kubernetes/pkg/apis/core"
@@ -33,6 +33,7 @@ const (
 	ConfigFirstSeenAnnotationKey = "kubernetes.io/config.seen"
 	ConfigHashAnnotationKey      = "kubernetes.io/config.hash"
 	CriticalPodAnnotationKey     = "scheduler.alpha.kubernetes.io/critical-pod"
+	PodShutdownAnnotationKey     = "tencent.com/shutdown-pod"
 )
 
 // PodOperation defines what changes will be made on a pod configuration.
@@ -196,4 +197,10 @@ func IsCriticalPodBasedOnPriority(priority int32) bool {
 		return true
 	}
 	return false
+}
+
+// IsPodShutdown check if the given pod is marked shutdown
+func IsPodShutdown(annotations map[string]string) bool {
+	val := annotations[PodShutdownAnnotationKey]
+	return val == "true"
 }

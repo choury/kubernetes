@@ -164,6 +164,7 @@ var ignoredKinds = sets.NewString(
 	"PodExecOptions",
 	"PodAttachOptions",
 	"PodPortForwardOptions",
+	"PodRestartOptions",
 	"PodProxyOptions",
 	"NodeProxyOptions",
 	"ServiceProxyOptions",
