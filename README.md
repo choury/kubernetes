@@ -1,3 +1,11 @@
+# Tencent Kubernetes
+
+[![BK Pipelines Status](https://api.bkdevops.qq.com/process/api/external/pipelines/projects/kubernetes/p-a0a1bfb602b74e9ba8a0936ba5ac0f0e/badge?X-DEVOPS-PROJECT-ID=kubernetes)](http://api.devops.oa.com/process/api-html/user/builds/projects/kubernetes/pipelines/p-a0a1bfb602b74e9ba8a0936ba5ac0f0e/latestFinished?X-DEVOPS-PROJECT-ID=kubernetes)
+
+----
+
+Tencent Kubernetes(tk8s) is a Kubernetes collaboration distribution in Tencent and forked from https://github.com/kubernetes/kubernetes.
+
 # Kubernetes
 
 [![GoDoc Widget]][GoDoc] [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/569/badge)](https://bestpractices.coreinfrastructure.org/projects/569)
