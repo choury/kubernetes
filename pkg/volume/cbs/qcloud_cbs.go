@@ -23,7 +23,8 @@ import (
 
 	"github.com/golang/glog"
 	"k8s.io/api/core/v1"
-
+	kstrings "k8s.io/kubernetes/pkg/util/strings"
+	
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubernetes/pkg/util/mount"
 	utilstrings "k8s.io/kubernetes/pkg/util/strings"
@@ -49,6 +50,10 @@ const (
 	//qcloudCbsPluginName = "cloud.tencent.com/qcloud-cbs"
 	qcloudCbsPluginName = "kubernetes.io/qcloud-cbs"
 )
+
+func getPath(uid types.UID, volName string, host volume.VolumeHost) string {
+	return host.GetPodVolumeDir(uid, kstrings.EscapeQualifiedNameForDisk(qcloudCbsPluginName), volName)
+}
 
 func (plugin *qcloudDiskPlugin) Init(host volume.VolumeHost) error {
 	plugin.host = host
@@ -112,6 +117,7 @@ func (plugin *qcloudDiskPlugin) newMounterInternal(spec *volume.Spec, podUID typ
 			diskID:  diskId,
 			mounter: mounter,
 			plugin:  plugin,
+			MetricsProvider: volume.NewMetricsStatFS(getPath(podUID, spec.Name(), plugin.host)),
 		},
 		fsType:      fsType,
 		diskMounter: volumehelper.NewSafeFormatAndMountFromHost(plugin.GetPluginName(), plugin.host)}, nil
@@ -124,6 +130,7 @@ func (plugin *qcloudDiskPlugin) newUnmounterInternal(volName string, podUID type
 			volName: volName,
 			mounter: mounter,
 			plugin:  plugin,
+			MetricsProvider: volume.NewMetricsStatFS(getPath(podUID, volName, plugin.host)),
 		}}, nil
 }
 
@@ -168,7 +175,7 @@ type qcloudCbs struct {
 	// diskMounter provides the interface that is used to mount the actual block device.
 	diskMounter mount.Interface
 	plugin      *qcloudDiskPlugin
-	volume.MetricsNil
+	volume.MetricsProvider
 }
 
 var _ volume.Mounter = &qcloudCbsMounter{}
