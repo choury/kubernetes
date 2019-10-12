@@ -30,6 +30,7 @@ import (
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/runtime"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -41,6 +42,7 @@ import (
 	"k8s.io/kubernetes/pkg/controller"
 	"k8s.io/kubernetes/pkg/controller/volume/events"
 	"k8s.io/kubernetes/pkg/controller/volume/expand/cache"
+	"k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/util/mount"
 	"k8s.io/kubernetes/pkg/volume"
 	"k8s.io/kubernetes/pkg/volume/util"
@@ -198,10 +200,16 @@ func (expc *expandController) pvcUpdate(oldObj, newObj interface{}) {
 	newSize := newPVC.Spec.Resources.Requests[v1.ResourceStorage]
 	oldSize := oldPVC.Spec.Resources.Requests[v1.ResourceStorage]
 
+	sizeChanged := false
+	if utilfeature.DefaultFeatureGate.Enabled(features.CSIShrinkPersistentVolumes) {
+		sizeChanged = newSize.Cmp(oldSize) != 0
+	} else {
+		sizeChanged = newSize.Cmp(oldSize) > 0
+	}
 	// We perform additional checks inside resizeMap.AddPVCUpdate function
 	// this check here exists to ensure - we do not consider every
 	// PVC update event for resizing, just those where the PVC size changes
-	if newSize.Cmp(oldSize) > 0 {
+	if sizeChanged {
 		pv, err := getPersistentVolume(newPVC, expc.pvLister)
 		if err != nil {
 			klog.V(5).Infof("Error getting Persistent Volume for PVC %q : %v", newPVC.UID, err)
