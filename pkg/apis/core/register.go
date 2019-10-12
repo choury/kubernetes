@@ -85,6 +85,7 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&PodLogOptions{},
 		&PodExecOptions{},
 		&PodPortForwardOptions{},
+		&PodRestartOptions{},
 		&PodProxyOptions{},
 		&ComponentStatus{},
 		&ComponentStatusList{},

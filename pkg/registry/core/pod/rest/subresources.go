@@ -191,6 +191,46 @@ func (r *PortForwardREST) Connect(ctx context.Context, name string, opts runtime
 	return newThrottledUpgradeAwareProxyHandler(location, transport, false, true, true, responder), nil
 }
 
+var restartMethods = []string{"POST"}
+
+// RestartREST implements the restart subresource for a Pod
+type RestartREST struct {
+	Store       *genericregistry.Store
+	KubeletConn client.ConnectionInfoGetter
+}
+
+// Implement Connecter
+var _ = rest.Connecter(&RestartREST{})
+
+// New returns an empty pod object
+func (r *RestartREST) New() runtime.Object {
+	return &api.Pod{}
+}
+
+// NewConnectOptions returns the versioned object that represents the
+// restart parameters
+func (r *RestartREST) NewConnectOptions() (runtime.Object, bool, string) {
+	return &api.PodRestartOptions{}, false, ""
+}
+
+// ConnectMethods returns the methods supported by restart
+func (r *RestartREST) ConnectMethods() []string {
+	return restartMethods
+}
+
+// Connect returns a handler for the pod restart
+func (r *RestartREST) Connect(ctx context.Context, name string, opts runtime.Object, responder rest.Responder) (http.Handler, error) {
+	restartOpts, ok := opts.(*api.PodRestartOptions)
+	if !ok {
+		return nil, fmt.Errorf("invalid options object: %#v", opts)
+	}
+	location, transport, err := pod.RestartLocation(r.Store, r.KubeletConn, ctx, name, restartOpts)
+	if err != nil {
+		return nil, err
+	}
+	return newThrottledUpgradeAwareProxyHandler(location, transport, false, false, true, responder), nil
+}
+
 func newThrottledUpgradeAwareProxyHandler(location *url.URL, transport http.RoundTripper, wrapTransport, upgradeRequired, interceptRedirects bool, responder rest.Responder) *proxy.UpgradeAwareHandler {
 	handler := proxy.NewUpgradeAwareHandler(location, transport, wrapTransport, upgradeRequired, proxy.NewErrorResponder(responder))
 	handler.InterceptRedirects = interceptRedirects && utilfeature.DefaultFeatureGate.Enabled(genericfeatures.StreamingProxyRedirects)

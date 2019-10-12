@@ -535,3 +535,38 @@ func PortForwardLocation(
 	}
 	return loc, nodeInfo.Transport, nil
 }
+
+// RestartLocation returns the restart URL for a pod.
+func RestartLocation(
+	getter ResourceGetter,
+	connInfo client.ConnectionInfoGetter,
+	ctx context.Context,
+	name string,
+	opts *api.PodRestartOptions,
+) (*url.URL, http.RoundTripper, error) {
+	pod, err := getPod(getter, ctx, name)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	nodeName := types.NodeName(pod.Spec.NodeName)
+	if len(nodeName) == 0 {
+		// If pod has not been assigned a host, return an empty location
+		return nil, nil, errors.NewBadRequest(fmt.Sprintf("pod %s does not have a host assigned", name))
+	}
+	nodeInfo, err := connInfo.GetConnectionInfo(ctx, nodeName)
+	if err != nil {
+		return nil, nil, err
+	}
+	params := url.Values{}
+	if opts.TerminationGracePeriodSeconds != nil {
+		params.Add(api.RestartTerminationPeriodParam, strconv.FormatInt(*opts.TerminationGracePeriodSeconds, 10))
+	}
+	loc := &url.URL{
+		Scheme:   nodeInfo.Scheme,
+		Host:     net.JoinHostPort(nodeInfo.Hostname, nodeInfo.Port),
+		Path:     fmt.Sprintf("/restart/%s/%s/%s", pod.Namespace, pod.Name, pod.UID),
+		RawQuery: params.Encode(),
+	}
+	return loc, nodeInfo.Transport, nil
+}

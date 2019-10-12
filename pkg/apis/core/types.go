@@ -4018,6 +4018,17 @@ type PodPortForwardOptions struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// PodRestartOptions is the query options to a Pod's restart call
+type PodRestartOptions struct {
+	metav1.TypeMeta
+
+	// Optional duration in seconds the pod needs to terminate gracefully.
+	// +optional
+	TerminationGracePeriodSeconds *int64
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
 // PodProxyOptions is the query options to a Pod's proxy call
 type PodProxyOptions struct {
 	metav1.TypeMeta
@@ -4621,6 +4632,8 @@ const (
 	ExecTTYParam = "tty"
 	// Command to run for remote command execution
 	ExecCommandParam = "command"
+	// Duration to terminate pod gracefully for resatrt.
+	RestartTerminationPeriodParam = "terminationGracePeriodSeconds"
 
 	// Name of header that specifies stream type
 	StreamType = "streamType"

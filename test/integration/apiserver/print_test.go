@@ -68,6 +68,7 @@ var kindWhiteList = sets.NewString(
 	"PodAttachOptions",
 	"PodExecOptions",
 	"PodPortForwardOptions",
+	"PodRestartOptions",
 	"PodLogOptions",
 	"PodProxyOptions",
 	"PodStatusResult",

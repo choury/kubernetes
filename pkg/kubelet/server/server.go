@@ -203,6 +203,7 @@ type HostInterface interface {
 	GetExec(podFullName string, podUID types.UID, containerName string, cmd []string, streamOpts remotecommandserver.Options) (*url.URL, error)
 	GetAttach(podFullName string, podUID types.UID, containerName string, streamOpts remotecommandserver.Options) (*url.URL, error)
 	GetPortForward(podName, podNamespace string, podUID types.UID, portForwardOpts portforward.V4Options) (*url.URL, error)
+	RestartPod(podFullName string, podUID types.UID, restartOpts *v1.PodRestartOptions) error
 }
 
 // NewServer initializes and configures a kubelet.Server object to handle HTTP requests.
@@ -402,6 +403,14 @@ func (s *Server) InstallDebuggingHandlers(criHandler http.Handler) {
 	ws.Route(ws.POST("/{podNamespace}/{podID}/{uid}").
 		To(s.getPortForward).
 		Operation("getPortForward"))
+	s.restfulCont.Add(ws)
+
+	ws = new(restful.WebService)
+	ws.
+		Path("/restart")
+	ws.Route(ws.POST("/{podNamespace}/{podID}/{uid}").
+		To(s.restartPod).
+		Operation("restartPod"))
 	s.restfulCont.Add(ws)
 
 	ws = new(restful.WebService)
@@ -805,6 +814,38 @@ func (s *Server) getPortForward(request *restful.Request, response *restful.Resp
 		return
 	}
 	proxyStream(response.ResponseWriter, request.Request, url)
+}
+
+func (s *Server) restartPod(request *restful.Request, response *restful.Response) {
+	podNamespace := request.PathParameter("podNamespace")
+	podName := request.PathParameter("podID")
+	podUID := types.UID(request.PathParameter("uid"))
+
+	pod, ok := s.host.GetPodByName(podNamespace, podName)
+	if !ok {
+		response.WriteError(http.StatusNotFound, fmt.Errorf("pod does not exist"))
+		return
+	}
+	if len(podUID) > 0 && pod.UID != podUID {
+		response.WriteError(http.StatusNotFound, fmt.Errorf("pod not found"))
+		return
+	}
+
+	podFullName := kubecontainer.GetPodFullName(pod)
+	var opts v1.PodRestartOptions
+	period := request.Request.FormValue(api.RestartTerminationPeriodParam)
+	if period != "" {
+		klog.Infof("Restart pod %s with period: %s", podFullName, period)
+		if periodSecond, err := strconv.ParseInt(period, 10, 0); err == nil {
+			opts.TerminationGracePeriodSeconds = &periodSecond
+		}
+	}
+	err := s.host.RestartPod(podFullName, pod.UID, &opts)
+	if err != nil {
+		response.WriteError(http.StatusInternalServerError, err)
+		return
+	}
+	writeJSONResponse(response, nil)
 }
 
 // ServeHTTP responds to HTTP requests on the Kubelet.

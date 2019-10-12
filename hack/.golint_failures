@@ -139,6 +139,7 @@ pkg/kubectl/cmd/plugin
 pkg/kubectl/cmd/portforward
 pkg/kubectl/cmd/proxy
 pkg/kubectl/cmd/replace
+pkg/kubectl/cmd/restart
 pkg/kubectl/cmd/rollingupdate
 pkg/kubectl/cmd/rollout
 pkg/kubectl/cmd/run
