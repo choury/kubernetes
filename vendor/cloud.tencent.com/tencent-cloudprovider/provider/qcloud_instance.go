@@ -19,14 +19,15 @@ package qcloud
 import (
 	"errors"
 	"github.com/dbdd4us/qcloudapi-sdk-go/cvm"
-	"k8s.io/apimachinery/pkg/types"
+	"github.com/golang/glog"
 	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubernetes/pkg/cloudprovider"
 
+	"context"
 	"fmt"
 	"net/url"
 	"strings"
-	"context"
 )
 
 //TODO 隔离，已退还，退还中
@@ -113,28 +114,20 @@ func (name kubernetesInstanceID) mapToInstanceID() (string, error) {
 //TODO 如果NodeAddressesByProviderID失败，nodeController会调用此接口
 func (self *QCloud) NodeAddresses(ctx context.Context, name types.NodeName) ([]v1.NodeAddress, error) {
 
+	glog.Infof("QCloud Plugin NodeAddresses NodeName %s", name)
+
 	addresses := make([]v1.NodeAddress, 0)
 
-	ip, err := self.metaData.PrivateIPv4()
-	if err == nil && ip == string(name) {
-		addresses = append(addresses, v1.NodeAddress{
-			Type: v1.NodeInternalIP, Address: ip,
-		})
-
-		publicIp, err := self.metaData.PublicIPv4()
-		if err == nil && len(publicIp) > 0 {
-			addresses = append(addresses, v1.NodeAddress{
-				Type: v1.NodeExternalIP, Address: publicIp,
-			})
-		}
-
-		return addresses, nil
-	}
-
-	info, err := self.getInstanceInfoByNodeName(string(name))
+	instanceId, err := self.metaData.InstanceID()
 	if err != nil {
 		return nil, err
 	}
+
+	info, err := self.getInstanceInfoById(instanceId)
+	if err != nil {
+		return nil, err
+	}
+
 	addresses = append(addresses, v1.NodeAddress{
 		Type: v1.NodeInternalIP, Address: info.PrivateIPAddresses[0],
 	})
@@ -149,46 +142,23 @@ func (self *QCloud) NodeAddresses(ctx context.Context, name types.NodeName) ([]v
 
 }
 
-//返回instanceID or cloudprovider.InstanceNotFound
-func (self *QCloud) ExternalID(ctx context.Context, name types.NodeName) (string, error) {
-	ip, err := self.metaData.PrivateIPv4()
-	if err == nil && ip == string(name) {
-		instanceId, err := self.metaData.InstanceID()
-		if err != nil {
-			return "", err
-		}
-		return instanceId, nil
-	}
-
-	info, err := self.getInstanceInfoByNodeName(string(name))
-	if err != nil {
-		return "", err
-	}
-	return info.InstanceID, nil
-
-}
-
 // /zone/instanceId
 //只在kubelet中调用
 func (self *QCloud) InstanceID(ctx context.Context, name types.NodeName) (string, error) {
-	ip, err := self.metaData.PrivateIPv4()
-	if err == nil && ip == string(name) {
-		instanceId, err := self.metaData.InstanceID()
-		if err != nil {
-			return "", err
-		}
-		zone, err := self.GetZone(ctx)
-		if err != nil {
-			return "", err
-		}
-		return "/" + zone.FailureDomain + "/" + instanceId, nil
-	}
-	info, err := self.getInstanceInfoByNodeName(string(name))
+
+	glog.Infof("QCloud Plugin InstanceID NodeName %s", name)
+
+	instanceId, err := self.metaData.InstanceID()
 	if err != nil {
 		return "", err
 	}
-	return "/" + info.Placement.Zone + "/" + info.InstanceID, nil
 
+	info, err := self.getInstanceInfoById(instanceId)
+	if err != nil {
+		return "", err
+	}
+
+	return "/" + info.Placement.Zone + "/" + info.InstanceID, nil
 }
 
 //只在Master中调用
@@ -197,10 +167,12 @@ func (self *QCloud) NodeAddressesByProviderID(ctx context.Context, providerID st
 	if err != nil {
 		return nil, err
 	}
+
 	info, err := self.getInstanceInfoById(instanceId)
 	if err != nil {
 		return nil, err
 	}
+
 	addresses := make([]v1.NodeAddress, 0)
 	addresses = append(addresses, v1.NodeAddress{
 		Type: v1.NodeInternalIP, Address: info.PrivateIPAddresses[0],
@@ -230,12 +202,9 @@ func (self *QCloud) AddSSHKeyToAllInstances(ctx context.Context, user string, ke
 //只会在kubelet中调用
 func (self *QCloud) CurrentNodeName(ctx context.Context, hostName string) (types.NodeName, error) {
 
-	ip, err := self.metaData.PrivateIPv4()
-	if err != nil {
-		return types.NodeName(""), err
-	}
-	return types.NodeName(ip), nil
+	glog.Infof("QCloud Plugin CurrentNodeName hostName %s", hostName)
 
+	return types.NodeName(hostName), nil
 }
 
 func (self *QCloud) InstanceExistsByProviderID(ctx context.Context, providerID string) (bool, error) {
@@ -252,7 +221,6 @@ func (self *QCloud) GetZoneByProviderID(ctx context.Context, providerID string) 
 func (self *QCloud) GetZoneByNodeName(ctx context.Context, nodeName types.NodeName) (cloudprovider.Zone, error) {
 	return cloudprovider.Zone{Region: self.Config.Region, FailureDomain: self.Config.Zone}, nil
 }
-func (self *QCloud)InstanceShutdownByProviderID(ctx context.Context, providerID string) (bool, error)  {
-	return false,nil
+func (self *QCloud) InstanceShutdownByProviderID(ctx context.Context, providerID string) (bool, error) {
+	return false, nil
 }
-
