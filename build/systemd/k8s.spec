@@ -67,7 +67,7 @@ Summary: An open source system for managing containerized applications across mu
 %description -n kubernetes-master-tk8s
 
 %package -n kubernetes-node-tk8s
-Requires: iptables >= 1.4.21, contrack-tools, ipset, ipvsadm
+Requires: iptables >= 1.4.21, conntrack-tools, ipset, ipvsadm
 Requires: systemd-units
 Summary: An open source system for managing containerized applications across multiple hosts, providing basic mechanisms for deployment, maintenance, and scaling of applications.
 %description -n kubernetes-node-tk8s
