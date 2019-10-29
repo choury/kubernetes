@@ -20,7 +20,15 @@ import (
 	"fmt"
 	glog "k8s.io/klog"
 	"io"
+
 	cloudprovider "k8s.io/cloud-provider"
+
+	"k8s.io/api/core/v1"
+	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
+	"reflect"
+
 	norm "cloud.tencent.com/tencent-cloudprovider/component"
 	"cloud.tencent.com/tencent-cloudprovider/credential"
 
@@ -43,6 +51,7 @@ import (
 
 const (
 	ProviderName                      = "qcloud"
+	HostNameType                      = "hostname"
 	AnnoServiceLBInternalSubnetID     = "service.kubernetes.io/qcloud-loadbalancer-internal"
 	AnnoServiceLBInternalUniqSubnetID = "service.kubernetes.io/qcloud-loadbalancer-internal-subnetid"
 
@@ -51,16 +60,21 @@ const (
 
 //TODO instance cache
 type QCloud struct {
+	kubeClient          clientset.Interface
 	currentInstanceInfo *norm.NormGetNodeInfoRsp
 	metaData            *metaDataCached
 	cvm                 *cvm.Client
 	clb                 *clb.Client
 	cbs                 *cbs.Client
 	snap                *snap.Client
+
 	cbsV3               *cbsv3.Client
 	cvmV3				*cvmv3.Client
 	Config              *Config
 	selfInstanceInfo    *cvm.InstanceInfo
+
+	cache            *nodeCache
+	listerSynced     cache.InformerSynced
 }
 
 type Config struct {
@@ -69,6 +83,8 @@ type Config struct {
 	Zone       string `json:"zone"`
 	VpcId      string `json:"vpcId"`
 
+	NodeNameType string `json:"nodeNameType"`
+
 	QCloudSecretId  string `json:"QCloudSecretId"`
 	QCloudSecretKey string `json:"QCloudSecretKey"`
 
@@ -76,8 +92,10 @@ type Config struct {
 }
 
 var (
-	config                 Config
-	QcloudInstanceNotFound = errors.New("qcloud instance not found")
+	config                  Config
+	QcloudInstanceNotFound  = errors.New("qcloud instance not found")
+	QcloudNodeNotFound      = errors.New("qcloud node not found")
+	QcloudNodeLanIPNotFound = errors.New("qcloud node lanIp not found")
 )
 
 func readConfig(cfg io.Reader) error {
@@ -90,7 +108,7 @@ func readConfig(cfg io.Reader) error {
 		glog.Errorf("Couldn't parse config: %v", err)
 		return err
 	}
-	glog.Info("config:%v", config)
+	glog.Infof("config:%v", config)
 
 	return nil
 }
@@ -172,6 +190,7 @@ func newQCloud() (*QCloud, error) {
 	cloud := &QCloud{
 		Config:   &config,
 		metaData: newMetaDataCached(),
+		cache:    &nodeCache{nodeMap: make(map[string]*cachedNode)}, //only hostname type use
 		cvm:      cvmClient,
 		clb:      clbClient,
 		cbs:      cbsClient,
@@ -179,6 +198,8 @@ func newQCloud() (*QCloud, error) {
 		cbsV3:    cbsV3Client,
 		cvmV3:    cvmV3Client,
 	}
+
+	glog.Infof("newQCloud for qcloud cloud provider (%p)", cloud)
 
 	return cloud, nil
 }
@@ -196,11 +217,177 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+
 		return newQCloud()
 	})
 }
 
-func (cloud *QCloud) Initialize(clientBuilder cloudprovider.ControllerClientBuilder, stop <-chan struct {}) {}
+func (cloud *QCloud) Initialize(clientBuilder cloudprovider.ControllerClientBuilder, stop <-chan struct {}) {
+
+	glog.Infof("Initialize for qcloud cloud provider, %p", cloud)
+
+	if cloud.IsHostNameType() {
+		cloud.kubeClient = clientBuilder.ClientOrDie("tke-bridge-agent")
+	}
+}
+
+func (cloud *QCloud) IsHostNameType() bool {
+	if cloud.Config.NodeNameType == HostNameType {
+		return true
+	}
+	return false
+}
+
+// SetInformers sets informers for qcloud cloud provider.
+func (cloud *QCloud) SetInformers(informerFactory informers.SharedInformerFactory) {
+	glog.Infof("Setting up informers for qcloud cloud provider, %p", cloud)
+
+	if !cloud.IsHostNameType() {
+		return
+	}
+
+	nodeInformer := informerFactory.Core().V1().Nodes().Informer()
+	nodeInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			node := obj.(*v1.Node)
+			cloud.AddNodeCaches(node)
+		},
+		UpdateFunc: func(prev, obj interface{}) {
+			prevNode := prev.(*v1.Node)
+			newNode := obj.(*v1.Node)
+			if !cloud.needsUpdate(prevNode, newNode) {
+				return
+			}
+			cloud.updateNodeCaches(prevNode, newNode)
+		},
+		DeleteFunc: func(obj interface{}) {
+			node, isNode := obj.(*v1.Node)
+			// We can get DeletedFinalStateUnknown instead of *v1.Node here
+			// and we need to handle that correctly.
+			if !isNode {
+				glog.Errorf("DeletedNode contained non-Node object: %v", obj)
+				return
+			}
+			cloud.deleteNodeCaches(node)
+		},
+	})
+
+	cloud.listerSynced = nodeInformer.HasSynced
+}
+
+// updateNodeCaches updates local cache for node's zones and external resource groups.
+func (cloud *QCloud) AddNodeCaches(node *v1.Node) {
+
+	glog.Infof("AddNodeCaches %s , %p ", node.Name, cloud)
+
+	if v, ok := cloud.cache.get(node.Name); ok {
+		glog.Warningf("AddNodeCaches %s but is already in cache", node.Name)
+		cloud.updateNodeCaches(v.state, node)
+		return
+	} else {
+		nodeUpdate := cloud.cache.getOrCreate(node)
+		if nodeUpdate != nil {
+			glog.Infof("AddNodeCaches %s succeed", nodeUpdate.state.Name)
+		} else {
+			glog.Infof("AddNodeCaches failed, nodeUpdate is empty")
+		}
+	}
+
+	return
+}
+
+func (cloud *QCloud) updateNodeCaches(oldNode *v1.Node, newNode *v1.Node) {
+
+	glog.V(4).Infof("updateNodeCaches oldNode %s newNode %s", oldNode.Name, newNode.Name)
+
+	if oldNode.Name == newNode.Name {
+		var v = cachedNode{state: newNode}
+		cloud.cache.set(newNode.Name, &v)
+	} else {
+		glog.Warningf("updateNodeCaches oldNode %s newNode %s not equal", oldNode.Name, newNode.Name)
+		cloud.cache.delete(oldNode.Name)
+
+		var v = cachedNode{state: newNode}
+		cloud.cache.set(newNode.Name, &v)
+	}
+}
+
+func (cloud *QCloud) deleteNodeCaches(node *v1.Node) {
+
+	glog.Infof("deleteNodeCaches node %s", node.Name)
+
+	if _, ok := cloud.cache.get(node.Name); ok {
+		cloud.cache.delete(node.Name)
+		return
+	} else {
+		glog.Warningf("deleteNodeCaches node %s not in cache", node.Name)
+	}
+}
+
+func (cloud *QCloud) needsUpdate(oldNode *v1.Node, newNode *v1.Node) bool {
+
+	if !reflect.DeepEqual(oldNode.UID, newNode.UID) {
+		glog.V(4).Infof("nodeName(%s,%s) UID Update", oldNode.Name, newNode.Name)
+		return true
+	}
+
+	if !reflect.DeepEqual(oldNode.Spec, newNode.Spec) {
+		glog.V(4).Infof("nodeName(%s,%s) Spec Update, oldNode %s ,newNode %s update", oldNode.Name, newNode.Name, oldNode.Spec.ProviderID, newNode.Spec.ProviderID)
+		return true
+	}
+
+	if !reflect.DeepEqual(oldNode.Status, newNode.Status) {
+		glog.V(4).Infof("nodeName(%s,%s) Status update,oldNode Addresses %#v ,newNode Addresses %#v", oldNode.Name, newNode.Name, oldNode.Status.Addresses, newNode.Status.Addresses)
+		return true
+	}
+
+	return false
+}
+
+func (cloud *QCloud) getInstanceIdByNodeName(nodeName string) (string, error) {
+	if v, ok := cloud.cache.get(nodeName); ok {
+		instanceId, err := kubernetesInstanceID(v.state.Spec.ProviderID).mapToInstanceID()
+		if err != nil {
+			return "", err
+		}
+		return instanceId, nil
+	} else {
+		glog.Errorf(" QCloud getInstanceId nodeName %s not found", nodeName)
+		return "", QcloudNodeNotFound
+	}
+}
+
+func (cloud *QCloud) getNodeNameByLanIp(lanIp string, allNodes []*v1.Node) (string, error) {
+	for _, value := range allNodes {
+		for _, v := range value.Status.Addresses {
+			if v.Type == v1.NodeInternalIP {
+				if string(v.Address) == lanIp {
+					return value.Name, nil
+				}
+			}
+		}
+	}
+
+	return "", QcloudNodeNotFound
+}
+
+func (cloud *QCloud) getLanIpByNodeName(nodeName string) (string, error) {
+	if value, ok := cloud.cache.get(nodeName); ok {
+		for _, v := range value.state.Status.Addresses {
+			if v.Type == v1.NodeInternalIP {
+				return string(v.Address), nil
+			}
+		}
+		return "", QcloudNodeLanIPNotFound
+	} else {
+		glog.Errorf(" QCloud getLanIp nodeName %s not found", nodeName)
+		return "", QcloudNodeNotFound
+	}
+}
+
+func (cloud *QCloud) getAllNodes() []*v1.Node {
+	return cloud.cache.allNodes()
+}
 
 func (cloud *QCloud) LoadBalancer() (cloudprovider.LoadBalancer, bool) {
 	return cloud, true
