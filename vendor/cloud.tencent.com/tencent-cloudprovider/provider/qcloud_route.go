@@ -18,48 +18,124 @@ package qcloud
 
 import (
 	norm "cloud.tencent.com/tencent-cloudprovider/component"
+	"context"
 	"github.com/golang/glog"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubernetes/pkg/cloudprovider"
-	"context"
 )
 
 func (self *QCloud) ListRoutes(ctx context.Context, clusterName string) ([]*cloudprovider.Route, error) {
+
+	glog.Infof("QCloud Plugin ListRoutes clusterName %s", clusterName)
+
 	routes := make([]*cloudprovider.Route, 0)
 	req := norm.NormListRoutesReq{ClusterName: clusterName}
 	rsp, err := norm.NormListRoutes(req)
 	if err != nil {
 		return nil, err
 	}
-	for _, item := range rsp.Routes {
-		if item.Subnet == "" {
-			continue
+
+	if !self.IsHostNameType() {
+		for _, item := range rsp.Routes {
+			if item.Subnet == "" {
+				continue
+			}
+			routes = append(routes, &cloudprovider.Route{
+				Name:            "", // TODO: what's this?
+				TargetNode:      types.NodeName(item.Name),
+				DestinationCIDR: item.Subnet,
+			})
 		}
-		routes = append(routes, &cloudprovider.Route{
-			Name:            "", // TODO: what's this?
-			TargetNode:      types.NodeName(item.Name),
-			DestinationCIDR: item.Subnet,
-		})
+	} else {
+		allNodes := self.getAllNodes()
+		for _, item := range rsp.Routes {
+			if item.Subnet == "" {
+				continue
+			}
+
+			nodeName, err := self.getNodeNameByLanIp(item.Name, allNodes)
+			if err != nil {
+				glog.Errorf("getNodeNameByLanIp %s failed %s", item.Name, err.Error())
+				continue
+			}
+
+			routes = append(routes, &cloudprovider.Route{
+				Name:            "", // TODO: what's this?
+				TargetNode:      types.NodeName(nodeName),
+				DestinationCIDR: item.Subnet,
+			})
+		}
 	}
+
 	return routes, nil
 }
 
 func (self *QCloud) CreateRoute(ctx context.Context, clusterName string, nameHint string, route *cloudprovider.Route) error {
-	glog.Infof("qcloud create route: %s %s %#v\n", clusterName, nameHint, route)
-	req := []norm.NormRouteInfo{
-		{Name: string(route.TargetNode), Subnet: route.DestinationCIDR},
+	glog.Infof("QCloud Plugin CreateRoute clusterName %s nameHint %s nodeName %s", clusterName, nameHint, string(route.TargetNode))
+
+	if !self.IsHostNameType() {
+		req := []norm.NormRouteInfo{
+			{Name: string(route.TargetNode), Subnet: route.DestinationCIDR},
+		}
+		_, err := norm.NormAddRoute(req)
+		if err != nil {
+			glog.Errorf("CreateRoute nodeName %s NormAddRoute failed %s", string(route.TargetNode), err.Error())
+			return err
+		}
+	} else {
+		lanIp, err := self.getLanIpByNodeName(string(route.TargetNode))
+		if err != nil {
+			glog.Errorf("CreateRoute nodeName %s getLanIpByNodeName failed %s", string(route.TargetNode), err.Error())
+			return err
+		}
+
+		req := []norm.NormRouteInfo{
+			{Name: string(lanIp), Subnet: route.DestinationCIDR},
+		}
+
+		_, err = norm.NormAddRoute(req)
+		if err != nil {
+			glog.Errorf("CreateRoute nodeName %s  lanIp %s NormAddRoute(2)failed %s", string(route.TargetNode), lanIp, err.Error())
+			return err
+		}
 	}
-	_, err := norm.NormAddRoute(req)
-	return err
+
+	return nil
 }
 
 // DeleteRoute deletes the specified managed route
 // Route should be as returned by ListRoutes
 func (self *QCloud) DeleteRoute(ctx context.Context, clusterName string, route *cloudprovider.Route) error {
 
-	req := []norm.NormRouteInfo{
-		{Name: string(route.TargetNode), Subnet: route.DestinationCIDR},
+	glog.Infof("QCloud Plugin DeleteRoute clusterName %s nodeName %s", clusterName, string(route.TargetNode))
+
+	if !self.IsHostNameType() {
+		req := []norm.NormRouteInfo{
+			{Name: string(route.TargetNode), Subnet: route.DestinationCIDR},
+		}
+		_, err := norm.NormDelRoute(req)
+
+		if err != nil {
+			glog.Errorf("DeleteRoute nodeName %s NormDelRoute failed %s", string(route.TargetNode), err.Error())
+			return err
+		}
+	} else {
+		lanIp, err := self.getLanIpByNodeName(string(route.TargetNode))
+		if err != nil {
+			glog.Errorf("CreateRoute nodeName %s getLanIpByNodeName failed %s", string(route.TargetNode), err.Error())
+			return err
+		}
+
+		req := []norm.NormRouteInfo{
+			{Name: string(lanIp), Subnet: route.DestinationCIDR},
+		}
+
+		_, err = norm.NormDelRoute(req)
+		if err != nil {
+			glog.Errorf("DeleteRoute nodeName %s  lanIp %s NormDelRoute(2) failed %s", string(route.TargetNode), lanIp, err.Error())
+			return err
+		}
 	}
-	_, err := norm.NormDelRoute(req)
-	return err
+
+	return nil
 }
