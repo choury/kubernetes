@@ -735,7 +735,13 @@ func (og *operationGenerator) resizeFileSystem(volumeToMount VolumeToMount, rsOp
 
 		pvcStatusCap := pvc.Status.Capacity[v1.ResourceStorage]
 		pvSpecCap := pv.Spec.Capacity[v1.ResourceStorage]
-		if pvcStatusCap.Cmp(pvSpecCap) < 0 {
+		sizeChanged := false
+		if utilfeature.DefaultFeatureGate.Enabled(features.CSIShrinkPersistentVolumes) {
+			sizeChanged = pvcStatusCap.Cmp(pvSpecCap) != 0
+		} else {
+			sizeChanged = pvcStatusCap.Cmp(pvSpecCap) < 0
+		}
+		if sizeChanged {
 			// File system resize was requested, proceed
 			klog.V(4).Infof(volumeToMount.GenerateMsgDetailed("MountVolume.resizeFileSystem entering", fmt.Sprintf("DevicePath %q", volumeToMount.DevicePath)))
 
@@ -1412,7 +1418,14 @@ func (og *operationGenerator) GenerateExpandVolumeFunc(
 	expandVolumeFunc := func() (error, error) {
 		newSize := pvcWithResizeRequest.ExpectedSize
 		pvSize := pvcWithResizeRequest.PersistentVolume.Spec.Capacity[v1.ResourceStorage]
-		if pvSize.Cmp(newSize) < 0 {
+		sizeChanged := false
+		if utilfeature.DefaultFeatureGate.Enabled(features.CSIShrinkPersistentVolumes) {
+			sizeChanged = pvSize.Cmp(newSize) != 0
+		} else {
+			sizeChanged = pvSize.Cmp(newSize) < 0
+		}
+
+		if sizeChanged {
 			updatedSize, expandErr := volumePlugin.ExpandVolumeDevice(
 				volumeSpec,
 				pvcWithResizeRequest.ExpectedSize,

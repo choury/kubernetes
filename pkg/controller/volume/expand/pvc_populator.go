@@ -29,6 +29,7 @@ import (
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -36,6 +37,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/kubernetes/pkg/controller/volume/events"
 	"k8s.io/kubernetes/pkg/controller/volume/expand/cache"
+	"k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/volume"
 	"k8s.io/kubernetes/pkg/volume/util"
 )
@@ -101,7 +103,14 @@ func (populator *pvcPopulator) Sync() {
 		pvcStatusSize := pvc.Status.Capacity[v1.ResourceStorage]
 		volumeSpec := volume.NewSpecFromPersistentVolume(pv, false)
 		volumePlugin, err := populator.volumePluginMgr.FindExpandablePluginBySpec(volumeSpec)
-		if (err != nil || volumePlugin == nil) && pvcStatusSize.Cmp(pvcSize) < 0 {
+		sizeChanged := false
+		if utilfeature.DefaultFeatureGate.Enabled(features.CSIShrinkPersistentVolumes) {
+			sizeChanged = pvcStatusSize.Cmp(pvcSize) != 0
+		} else {
+			sizeChanged = pvcStatusSize.Cmp(pvcSize) > 0
+		}
+
+		if (err != nil || volumePlugin == nil) && sizeChanged {
 			err = fmt.Errorf("didn't find a plugin capable of expanding the volume; " +
 				"waiting for an external controller to process this PVC")
 			eventType := v1.EventTypeNormal

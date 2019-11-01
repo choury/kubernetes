@@ -1803,6 +1803,13 @@ func ValidatePersistentVolumeUpdate(newPv, oldPv *core.PersistentVolume) field.E
 	allErrs := field.ErrorList{}
 	allErrs = ValidatePersistentVolume(newPv)
 
+	if utilfeature.DefaultFeatureGate.Enabled(features.CSIShrinkPersistentVolumes) {
+		if newPv.Spec.CSI != nil && newPv.Spec.CSI.VolumeAttributes != nil {
+			newPv = newPv.DeepCopy()
+			newPv.Spec.CSI.VolumeAttributes = oldPv.Spec.CSI.VolumeAttributes
+		}
+	}
+
 	// PersistentVolumeSource should be immutable after creation.
 	if !apiequality.Semantic.DeepEqual(newPv.Spec.PersistentVolumeSource, oldPv.Spec.PersistentVolumeSource) {
 		allErrs = append(allErrs, field.Forbidden(field.NewPath("spec", "persistentvolumesource"), "is immutable after creation"))
@@ -1915,8 +1922,18 @@ func ValidatePersistentVolumeClaimUpdate(newPvc, oldPvc *core.PersistentVolumeCl
 
 	if utilfeature.DefaultFeatureGate.Enabled(features.ExpandPersistentVolumes) {
 		// lets make sure storage values are same.
-		if newPvc.Status.Phase == core.ClaimBound && newPvcClone.Spec.Resources.Requests != nil {
-			newPvcClone.Spec.Resources.Requests["storage"] = oldPvc.Spec.Resources.Requests["storage"]
+
+		if !utilfeature.DefaultFeatureGate.Enabled(features.CSIShrinkPersistentVolumes) {
+			if newPvc.Status.Phase == core.ClaimBound && newPvcClone.Spec.Resources.Requests != nil {
+				newPvcClone.Spec.Resources.Requests["storage"] = oldPvc.Spec.Resources.Requests["storage"]
+			}
+		} else {
+			if newPvcClone.Spec.Resources.Requests != nil {
+				newPvcClone.Spec.Resources.Requests = core.ResourceList{}
+				for k, quota := range oldPvc.Spec.Resources.Requests {
+					newPvcClone.Spec.Resources.Requests[k] = quota
+				}
+			}
 		}
 
 		oldSize := oldPvc.Spec.Resources.Requests["storage"]
@@ -1925,8 +1942,10 @@ func ValidatePersistentVolumeClaimUpdate(newPvc, oldPvc *core.PersistentVolumeCl
 		if !apiequality.Semantic.DeepEqual(newPvcClone.Spec, oldPvcClone.Spec) {
 			allErrs = append(allErrs, field.Forbidden(field.NewPath("spec"), "is immutable after creation except resources.requests for bound claims"))
 		}
-		if newSize.Cmp(oldSize) < 0 {
-			allErrs = append(allErrs, field.Forbidden(field.NewPath("spec", "resources", "requests", "storage"), "field can not be less than previous value"))
+		if !utilfeature.DefaultFeatureGate.Enabled(features.CSIShrinkPersistentVolumes) {
+			if newSize.Cmp(oldSize) < 0 {
+				allErrs = append(allErrs, field.Forbidden(field.NewPath("spec", "resources", "requests", "storage"), "field can not be less than previous value"))
+			}
 		}
 
 	} else {

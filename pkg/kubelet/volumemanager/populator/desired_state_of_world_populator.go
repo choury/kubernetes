@@ -436,6 +436,9 @@ func getUniqueVolumeName(
 func volumeRequiresFSResize(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume) bool {
 	capacity := pvc.Status.Capacity[v1.ResourceStorage]
 	requested := pv.Spec.Capacity[v1.ResourceStorage]
+	if utilfeature.DefaultFeatureGate.Enabled(features.CSIShrinkPersistentVolumes) {
+		return requested.Cmp(capacity) != 0
+	}
 	return requested.Cmp(capacity) > 0
 }
 

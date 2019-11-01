@@ -440,6 +440,10 @@ const (
 	// Enables the inplace resources update feature.
 	// TODO: Add an admission controller to admin update request in v1.2
 	InPlaceResourcesUpdate utilfeature.Feature = "InPlaceResourcesUpdate"
+
+	// owner: @wadecai
+	// Enalbe Shrink the pv
+	CSIShrinkPersistentVolumes utilfeature.Feature = "CSIShrinkPersistentVolumes"
 )
 
 func init() {
@@ -515,6 +519,7 @@ var defaultKubernetesFeatureGates = map[utilfeature.Feature]utilfeature.FeatureS
 	KubeletPodResources:                         {Default: false, PreRelease: utilfeature.Alpha},
 	WindowsGMSA:                                 {Default: false, PreRelease: utilfeature.Alpha},
 	InPlaceResourcesUpdate:                      {Default: false, PreRelease: utilfeature.Alpha},
+	CSIShrinkPersistentVolumes:                  {Default: false, PreRelease: utilfeature.Alpha},
 
 	// inherited features from generic apiserver, relisted here to get a conflict if it is changed
 	// unintentionally on either side:
