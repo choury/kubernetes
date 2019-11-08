@@ -442,6 +442,7 @@ func (ds *dockerService) UpdateContainerResources(_ context.Context, r *runtimea
 			CPUQuota:   resources.CpuQuota,
 			CPUShares:  resources.CpuShares,
 			Memory:     resources.MemoryLimitInBytes,
+			MemorySwap: resources.MemoryLimitInBytes,
 			CpusetCpus: resources.CpusetCpus,
 			CpusetMems: resources.CpusetMems,
 		},
