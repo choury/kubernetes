@@ -978,14 +978,14 @@ func (nc *Controller) tryUpdateNodeStatus(node *v1.Node) (time.Duration, v1.Node
 			glog.V(4).Infof("node %v hasn't been updated for %+v. Last ready condition is: %+v",
 				node.Name, nc.now().Time.Sub(savedNodeStatus.probeTimestamp.Time), observedReadyCondition)
 			if observedReadyCondition.Status != v1.ConditionUnknown {
-				if utilnode.IsNodeUnknown(node) {
-					currentReadyCondition.Status = v1.ConditionUnknown
-					currentReadyCondition.Reason = "NodeStatusUnknown"
-					currentReadyCondition.Message = "Kubelet stopped posting node status."
-					// LastProbeTime is the last time we heard from kubelet.
-					currentReadyCondition.LastHeartbeatTime = observedReadyCondition.LastHeartbeatTime
-					currentReadyCondition.LastTransitionTime = nc.now()
-				}
+				//if utilnode.IsNodeUnknown(node) {
+				currentReadyCondition.Status = v1.ConditionUnknown
+				currentReadyCondition.Reason = "NodeStatusUnknown"
+				currentReadyCondition.Message = "Kubelet stopped posting node status."
+				// LastProbeTime is the last time we heard from kubelet.
+				currentReadyCondition.LastHeartbeatTime = observedReadyCondition.LastHeartbeatTime
+				currentReadyCondition.LastTransitionTime = nc.now()
+				//}
 			}
 		}
 
