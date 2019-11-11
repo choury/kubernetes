@@ -18,8 +18,8 @@ package qcloud
 
 import (
 	"fmt"
-	glog "k8s.io/klog"
 	"io"
+	glog "k8s.io/klog"
 
 	cloudprovider "k8s.io/cloud-provider"
 
@@ -44,14 +44,15 @@ import (
 
 	//for cbs cvm v3 yun api
 	cbsv3 "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/cbs/v20170312"
-	cvmv3 "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/cvm/v20170312"
 	v3common "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common"
 	"github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common/profile"
+	cvmv3 "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/cvm/v20170312"
 )
 
 const (
 	ProviderName                      = "qcloud"
 	HostNameType                      = "hostname"
+	ProviderUsedServiceAccountName    = "node-controller"
 	AnnoServiceLBInternalSubnetID     = "service.kubernetes.io/qcloud-loadbalancer-internal"
 	AnnoServiceLBInternalUniqSubnetID = "service.kubernetes.io/qcloud-loadbalancer-internal-subnetid"
 
@@ -68,13 +69,13 @@ type QCloud struct {
 	cbs                 *cbs.Client
 	snap                *snap.Client
 
-	cbsV3               *cbsv3.Client
-	cvmV3				*cvmv3.Client
-	Config              *Config
-	selfInstanceInfo    *cvm.InstanceInfo
+	cbsV3            *cbsv3.Client
+	cvmV3            *cvmv3.Client
+	Config           *Config
+	selfInstanceInfo *cvm.InstanceInfo
 
-	cache            *nodeCache
-	listerSynced     cache.InformerSynced
+	cache        *nodeCache
+	listerSynced cache.InformerSynced
 }
 
 type Config struct {
@@ -132,7 +133,7 @@ func newQCloud() (*QCloud, error) {
 			glog.Errorf("NewNormCredentialV3 failed, %v", err)
 		}
 		normCred, err := credential.NewNormCredential(expiredDuration, refresher)
-		if err != nil{
+		if err != nil {
 			glog.Errorf("NewNormCredential failed, %v", err)
 		}
 		cred = &normCred
@@ -222,12 +223,12 @@ func init() {
 	})
 }
 
-func (cloud *QCloud) Initialize(clientBuilder cloudprovider.ControllerClientBuilder, stop <-chan struct {}) {
+func (cloud *QCloud) Initialize(clientBuilder cloudprovider.ControllerClientBuilder, stop <-chan struct{}) {
 
 	glog.Infof("Initialize for qcloud cloud provider, %p", cloud)
 
 	if cloud.IsHostNameType() {
-		cloud.kubeClient = clientBuilder.ClientOrDie("tke-bridge-agent")
+		cloud.kubeClient = clientBuilder.ClientOrDie(ProviderUsedServiceAccountName)
 	}
 }
 
