@@ -48,6 +48,7 @@ import (
 const (
 	ProviderName                      = "qcloud"
 	HostNameType                      = "hostname"
+	ProviderUsedServiceAccountName    = "node-controller"
 	AnnoServiceLBInternalSubnetID     = "service.kubernetes.io/qcloud-loadbalancer-internal"
 	AnnoServiceLBInternalUniqSubnetID = "service.kubernetes.io/qcloud-loadbalancer-internal-subnetid"
 
@@ -205,7 +206,7 @@ func (cloud *QCloud) Initialize(clientBuilder controller.ControllerClientBuilder
 	glog.Infof("Initialize for qcloud cloud provider, %p", cloud)
 
 	if cloud.IsHostNameType() {
-		cloud.kubeClient = clientBuilder.ClientOrDie("tke-bridge-agent")
+		cloud.kubeClient = clientBuilder.ClientOrDie(ProviderUsedServiceAccountName)
 	}
 }
 
