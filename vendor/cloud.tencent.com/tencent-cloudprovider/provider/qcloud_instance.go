@@ -19,13 +19,12 @@ package qcloud
 import (
 	"errors"
 	"github.com/dbdd4us/qcloudapi-sdk-go/cvm"
-	glog "k8s.io/klog"
 	"k8s.io/api/core/v1"
+	glog "k8s.io/klog"
 
 	cloudprovider "k8s.io/cloud-provider"
 
 	"k8s.io/apimachinery/pkg/types"
-
 
 	"context"
 	"fmt"
@@ -141,28 +140,23 @@ func (self *QCloud) NodeAddresses(ctx context.Context, name types.NodeName) ([]v
 
 	addresses := make([]v1.NodeAddress, 0)
 
-	instanceId, err := self.metaData.InstanceID()
-	if err != nil {
-		return nil, err
-	}
-
-	info, err := self.getInstanceInfoById(instanceId)
+	privateIp, err := self.metaData.PrivateIPv4()
 	if err != nil {
 		return nil, err
 	}
 
 	addresses = append(addresses, v1.NodeAddress{
-		Type: v1.NodeInternalIP, Address: info.PrivateIPAddresses[0],
+		Type: v1.NodeInternalIP, Address: privateIp,
 	})
 
-	for _, publicIp := range info.PublicIPAddresses {
+	publicIp, err := self.metaData.PublicIPv4()
+	if err == nil && len(publicIp) > 0 {
 		addresses = append(addresses, v1.NodeAddress{
 			Type: v1.NodeExternalIP, Address: publicIp,
 		})
 	}
 
 	return addresses, nil
-
 }
 
 // /zone/instanceId
@@ -176,12 +170,12 @@ func (self *QCloud) InstanceID(ctx context.Context, name types.NodeName) (string
 		return "", err
 	}
 
-	info, err := self.getInstanceInfoById(instanceId)
+	zone, err := self.GetZone(ctx)
 	if err != nil {
 		return "", err
 	}
 
-	return "/" + info.Placement.Zone + "/" + info.InstanceID, nil
+	return "/" + zone.FailureDomain + "/" + instanceId, nil
 }
 
 //只在Master中调用
@@ -191,17 +185,28 @@ func (self *QCloud) NodeAddressesByProviderID(ctx context.Context, providerID st
 		return nil, err
 	}
 
-	info, err := self.getInstanceInfoById(instanceId)
+	info, err := self.getInstanceInfoByInstanceIdSingleV3(instanceId)
 	if err != nil {
 		return nil, err
 	}
 
+	var privateIpAddresses string
+	if (len(info.PrivateIpAddresses) > 0) && (info.PrivateIpAddresses[0] != nil) {
+		privateIpAddresses = *(info.PrivateIpAddresses[0])
+	}
+
 	addresses := make([]v1.NodeAddress, 0)
 	addresses = append(addresses, v1.NodeAddress{
-		Type: v1.NodeInternalIP, Address: info.PrivateIPAddresses[0],
+		Type: v1.NodeInternalIP, Address: privateIpAddresses,
 	})
 
-	for _, publicIp := range info.PublicIPAddresses {
+	for _, publicIpPtr := range info.PublicIpAddresses {
+
+		var publicIp string
+		if publicIpPtr != nil {
+			publicIp = *publicIpPtr
+		}
+
 		addresses = append(addresses, v1.NodeAddress{
 			Type: v1.NodeExternalIP, Address: publicIp,
 		})
@@ -245,6 +250,6 @@ func (self *QCloud) GetZoneByNodeName(ctx context.Context, nodeName types.NodeNa
 	return cloudprovider.Zone{Region: self.Config.Region, FailureDomain: self.Config.Zone}, nil
 }
 
-func (self * QCloud) InstanceShutdownByProviderID(ctx context.Context, providerID string) (bool, error){
+func (self *QCloud) InstanceShutdownByProviderID(ctx context.Context, providerID string) (bool, error) {
 	return true, nil
 }
