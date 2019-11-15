@@ -24,8 +24,8 @@ import (
 	"time"
 
 	qcloud "cloud.tencent.com/tencent-cloudprovider/provider"
-	"k8s.io/klog"
 	"k8s.io/api/core/v1"
+	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/util/mount"
 	"k8s.io/kubernetes/pkg/volume"
 
@@ -40,8 +40,8 @@ type qcloudCbsAttacher struct {
 var _ volume.Attacher = &qcloudCbsAttacher{}
 var _ volume.AttachableVolumePlugin = &qcloudDiskPlugin{}
 
-func (plugin *qcloudDiskPlugin) CanAttach(spec *volume.Spec) bool {
-	return true
+func (plugin *qcloudDiskPlugin) CanAttach(spec *volume.Spec) (bool, error) {
+	return true, nil
 }
 
 func (plugin *qcloudDiskPlugin) NewAttacher() (volume.Attacher, error) {
@@ -146,7 +146,7 @@ func (attacher *qcloudCbsAttacher) WaitForAttach(spec *volume.Spec, devicePath s
 	for {
 		select {
 		case <-ticker.C:
-			klog.V(5).Infof("Checking cbs disk is attached", volumeSource.CbsDiskId)
+			klog.V(5).Infof("Checking cbs disk (%q) is attached", volumeSource.CbsDiskId)
 			// TODO because udev or tlinux bug, we maybe traverse /sys/block/vdx/serial to find disk
 			path, err := verifyDevicePath(devicePath)
 			if err != nil {
@@ -180,6 +180,11 @@ func (attacher *qcloudCbsAttacher) GetDeviceMountPath(spec *volume.Spec) (string
 func (plugin *qcloudDiskPlugin) GetDeviceMountRefs(deviceMountPath string) ([]string, error) {
 	mounter := plugin.host.GetMounter(qcloudCbsPluginName)
 	return mounter.GetMountRefs(deviceMountPath)
+}
+
+// CanDeviceMount determines if device in volume.Spec is mountable
+func (plugin *qcloudDiskPlugin) CanDeviceMount(spec *volume.Spec) (bool, error) {
+	return true, nil
 }
 
 // MountDevice mounts device to global mount point.

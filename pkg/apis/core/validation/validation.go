@@ -1829,14 +1829,14 @@ func ValidatePersistentVolumeSpec(pvSpec *core.PersistentVolumeSpec, pvName stri
 		}
 	}
 
-	if pv.Spec.QcloudCbs != nil {
+	if pvSpec.QcloudCbs != nil {
 		if numVolumes > 0 {
-			allErrs = append(allErrs, field.Forbidden(specPath.Child("qcloudCbs"),
+			allErrs = append(allErrs, field.Forbidden(fldPath.Child("qcloudCbs"),
 				"may not specify more than 1 volume type"))
 		} else {
 			numVolumes++
 			allErrs = append(allErrs,
-				validateQcloudDiskVolumeSource(pv.Spec.QcloudCbs, specPath.Child("qcloudCbs"))...)
+				validateQcloudDiskVolumeSource(pvSpec.QcloudCbs, fldPath.Child("qcloudCbs"))...)
 		}
 	}
 

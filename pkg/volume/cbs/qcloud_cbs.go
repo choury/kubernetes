@@ -138,9 +138,14 @@ func (plugin *qcloudDiskPlugin) newUnmounterInternal(volName string, podUID type
 }
 
 func (plugin *qcloudDiskPlugin) ConstructVolumeSpec(volumeName, mountPath string) (*volume.Spec, error) {
-	mounter := plugin.host.GetMounter(qcloudCbsPluginName)
-	pluginDir := plugin.host.GetPluginDir(plugin.GetPluginName())
-	sourceName, err := mounter.GetDeviceNameFromMount(mountPath, pluginDir)
+	mounter := plugin.host.GetMounter(qcloudCbsPluginName)	
+	kvh, ok := plugin.host.(volume.KubeletVolumeHost)
+	if !ok {
+		return nil, fmt.Errorf("plugin volume host does not implement KubeletVolumeHost interface")
+	}
+	hu := kvh.GetHostUtil()
+	pluginMntDir := volumehelper.GetPluginMountDir(plugin.host, plugin.GetPluginName())
+	sourceName, err := hu.GetDeviceNameFromMount(mounter, mountPath, pluginMntDir)
 	if err != nil {
 		return nil, err
 	}
@@ -201,12 +206,12 @@ func (b *qcloudCbsMounter) CanMount() error {
 }
 
 // SetUp attaches the disk and bind mounts to the volume path.
-func (b *qcloudCbsMounter) SetUp(fsGroup *int64) error {
-	return b.SetUpAt(b.GetPath(), fsGroup)
+func (b *qcloudCbsMounter) SetUp(mounterArgs volume.MounterArgs) error {
+	return b.SetUpAt(b.GetPath(), mounterArgs)
 }
 
 // SetUp attaches the disk and bind mounts to the volume path.
-func (b *qcloudCbsMounter) SetUpAt(dir string, fsGroup *int64) error {
+func (b *qcloudCbsMounter) SetUpAt(dir string, mounterArgs volume.MounterArgs) error {
 
 	notmnt, err := b.mounter.IsLikelyNotMountPoint(dir)
 	klog.V(4).Infof("qcloud cbs SetUp check mount point, dir(%s), cbs disk(%s), error(%v), notmnt(%t)",
@@ -259,7 +264,7 @@ func (b *qcloudCbsMounter) SetUpAt(dir string, fsGroup *int64) error {
 	}
 
 	if !b.readOnly {
-		volume.SetVolumeOwnership(b, fsGroup)
+		volume.SetVolumeOwnership(b, mounterArgs.FsGroup)
 	}
 
 	klog.V(3).Infof("cbs volume %s mounted to %s succeded", b.diskID, dir)
@@ -321,7 +326,7 @@ func (plugin *qcloudDiskPlugin) GetAccessModes() []v1.PersistentVolumeAccessMode
 }
 
 func getVolumeSource(
-spec *volume.Spec) (*v1.QcloudCbsVolumeSource, bool, error) {
+	spec *volume.Spec) (*v1.QcloudCbsVolumeSource, bool, error) {
 	if spec.Volume != nil && spec.Volume.QcloudCbs != nil {
 		return spec.Volume.QcloudCbs, spec.ReadOnly, nil
 	} else if spec.PersistentVolume != nil &&

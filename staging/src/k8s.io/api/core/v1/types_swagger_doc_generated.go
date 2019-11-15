@@ -1362,6 +1362,7 @@ var map_PersistentVolumeSource = map[string]string{
 	"local":                "Local represents directly-attached storage with node affinity",
 	"storageos":            "StorageOS represents a StorageOS volume that is attached to the kubelet's host machine and mounted into the pod More info: https://examples.k8s.io/volumes/storageos/README.md",
 	"csi":                  "CSI represents storage that is handled by an external CSI driver (Beta feature).",
+	"qcloudCbs":            "CloudCbs represents a qcloud cbs data disk mount on the host and bind mount to the pod",
 }
 
 func (PersistentVolumeSource) SwaggerDoc() map[string]string {
@@ -1761,6 +1762,16 @@ var map_ProjectedVolumeSource = map[string]string{
 
 func (ProjectedVolumeSource) SwaggerDoc() map[string]string {
 	return map_ProjectedVolumeSource
+}
+
+var map_QcloudCbsVolumeSource = map[string]string{
+	"cbsDiskId": "Unique id of the persistent disk resource. Used to identify the disk in Qcloud",
+	"fsType":    "Filesystem type to mount. Must be a filesystem type supported by the host operating system. Ex. \"ext4\", \"xfs\", \"ntfs\". Implicitly inferred to be \"ext4\" if unspecified.",
+	"readOnly":  "Optional: Defaults to false (read/write). ReadOnly here will force the ReadOnly setting in VolumeMounts.",
+}
+
+func (QcloudCbsVolumeSource) SwaggerDoc() map[string]string {
+	return map_QcloudCbsVolumeSource
 }
 
 var map_QuobyteVolumeSource = map[string]string{
@@ -2423,6 +2434,7 @@ var map_VolumeSource = map[string]string{
 	"portworxVolume":        "PortworxVolume represents a portworx volume attached and mounted on kubelets host machine",
 	"scaleIO":               "ScaleIO represents a ScaleIO persistent volume attached and mounted on Kubernetes nodes.",
 	"storageos":             "StorageOS represents a StorageOS volume attached and mounted on Kubernetes nodes.",
+	"qcloudCbs":             "QcloudCbs represents a qcloud cbs data disk mount on the host and bind mount to the pod",
 	"csi":                   "CSI (Container Storage Interface) represents storage that is handled by an external CSI driver (Alpha feature).",
 }
 

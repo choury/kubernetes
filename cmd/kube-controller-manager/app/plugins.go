@@ -71,9 +71,7 @@ func ProbeAttachableVolumePlugins() []volume.VolumePlugin {
 	allPlugins = append(allPlugins, rbd.ProbeVolumePlugins()...)
 	allPlugins = append(allPlugins, cbs.ProbeVolumePlugins()...)
 	allPlugins = append(allPlugins, cbs_dirty.ProbeVolumePlugins()...)
-	if utilfeature.DefaultFeatureGate.Enabled(features.CSIPersistentVolume) {
-		allPlugins = append(allPlugins, csi.ProbeVolumePlugins()...)
-	}
+	allPlugins = append(allPlugins, csi.ProbeVolumePlugins()...)
 	return allPlugins
 }
 
@@ -144,7 +142,6 @@ func ProbeControllerVolumePlugins(cloud cloudprovider.Interface, config persiste
 	allPlugins = append(allPlugins, scaleio.ProbeVolumePlugins()...)
 	allPlugins = append(allPlugins, local.ProbeVolumePlugins()...)
 	allPlugins = append(allPlugins, storageos.ProbeVolumePlugins()...)
-
 	allPlugins = append(allPlugins, cbs.ProbeVolumePlugins()...)
 
 	if utilfeature.DefaultFeatureGate.Enabled(features.CSIInlineVolume) {
