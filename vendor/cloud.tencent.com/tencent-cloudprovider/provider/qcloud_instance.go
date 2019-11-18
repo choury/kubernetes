@@ -138,21 +138,17 @@ func (self *QCloud) NodeAddresses(ctx context.Context, name types.NodeName) ([]v
 
 	addresses := make([]v1.NodeAddress, 0)
 
-	instanceId, err := self.metaData.InstanceID()
-	if err != nil {
-		return nil, err
-	}
-
-	info, err := self.getInstanceInfoById(instanceId)
+	privateIp, err := self.metaData.PrivateIPv4()
 	if err != nil {
 		return nil, err
 	}
 
 	addresses = append(addresses, v1.NodeAddress{
-		Type: v1.NodeInternalIP, Address: info.PrivateIPAddresses[0],
+		Type: v1.NodeInternalIP, Address: privateIp,
 	})
 
-	for _, publicIp := range info.PublicIPAddresses {
+	publicIp, err := self.metaData.PublicIPv4()
+	if err == nil && len(publicIp) > 0 {
 		addresses = append(addresses, v1.NodeAddress{
 			Type: v1.NodeExternalIP, Address: publicIp,
 		})
@@ -173,12 +169,12 @@ func (self *QCloud) InstanceID(ctx context.Context, name types.NodeName) (string
 		return "", err
 	}
 
-	info, err := self.getInstanceInfoById(instanceId)
+	zone, err := self.GetZone(ctx)
 	if err != nil {
 		return "", err
 	}
 
-	return "/" + info.Placement.Zone + "/" + info.InstanceID, nil
+	return "/" + zone.FailureDomain + "/" + instanceId, nil
 }
 
 //只在Master中调用
