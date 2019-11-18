@@ -45,6 +45,8 @@ import (
 	"k8s.io/kubernetes/pkg/volume/rbd"
 	"k8s.io/kubernetes/pkg/volume/scaleio"
 	"k8s.io/kubernetes/pkg/volume/storageos"
+	cbs "k8s.io/kubernetes/pkg/volume/cbs"
+	cbs_dirty "k8s.io/kubernetes/pkg/volume/cbs_dirty"
 	volumeutil "k8s.io/kubernetes/pkg/volume/util"
 
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
@@ -67,6 +69,8 @@ func ProbeAttachableVolumePlugins() []volume.VolumePlugin {
 	allPlugins = append(allPlugins, fc.ProbeVolumePlugins()...)
 	allPlugins = append(allPlugins, iscsi.ProbeVolumePlugins()...)
 	allPlugins = append(allPlugins, rbd.ProbeVolumePlugins()...)
+	allPlugins = append(allPlugins, cbs.ProbeVolumePlugins()...)
+	allPlugins = append(allPlugins, cbs_dirty.ProbeVolumePlugins()...)
 	allPlugins = append(allPlugins, csi.ProbeVolumePlugins()...)
 	return allPlugins
 }
@@ -138,6 +142,7 @@ func ProbeControllerVolumePlugins(cloud cloudprovider.Interface, config persiste
 	allPlugins = append(allPlugins, scaleio.ProbeVolumePlugins()...)
 	allPlugins = append(allPlugins, local.ProbeVolumePlugins()...)
 	allPlugins = append(allPlugins, storageos.ProbeVolumePlugins()...)
+	allPlugins = append(allPlugins, cbs.ProbeVolumePlugins()...)
 
 	if utilfeature.DefaultFeatureGate.Enabled(features.CSIInlineVolume) {
 		allPlugins = append(allPlugins, csi.ProbeVolumePlugins()...)

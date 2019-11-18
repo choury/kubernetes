@@ -844,6 +844,8 @@ func describeVolumes(volumes []corev1.Volume, w PrefixWriter, space string) {
 			printProjectedVolumeSource(volume.VolumeSource.Projected, w)
 		case volume.VolumeSource.CSI != nil:
 			printCSIVolumeSource(volume.VolumeSource.CSI, w)
+		case volume.VolumeSource.QcloudCbs != nil:
+			printQcloudCbsVolumeSource(volume.VolumeSource.QcloudCbs, w)
 		default:
 			w.Write(LEVEL_1, "<unknown>\n")
 		}
@@ -955,6 +957,14 @@ func printPortworxVolumeSource(pwxVolume *corev1.PortworxVolumeSource, w PrefixW
 	w.Write(LEVEL_2, "Type:\tPortworxVolume (a Portworx Volume resource)\n"+
 		"    VolumeID:\t%v\n",
 		pwxVolume.VolumeID)
+}
+
+func printQcloudCbsVolumeSource(d *corev1.QcloudCbsVolumeSource, w PrefixWriter) {
+	w.Write(LEVEL_2, "    Type:\tQcloudCbs (QCloud cbs disk mount on the host and bind mount to the pod)\n" +
+		"    CbsDiskId:\t%v\n" +
+		"    FSType:\t%v\n" +
+		"    ReadOnly:\t%v\n",
+		d.CbsDiskId, d.FSType, d.ReadOnly)
 }
 
 func printISCSIVolumeSource(iscsi *corev1.ISCSIVolumeSource, w PrefixWriter) {
@@ -1450,6 +1460,8 @@ func describePersistentVolume(pv *corev1.PersistentVolume, events *corev1.EventL
 			printFlockerVolumeSource(pv.Spec.Flocker, w)
 		case pv.Spec.CSI != nil:
 			printCSIPersistentVolumeSource(pv.Spec.CSI, w)
+		case pv.Spec.QcloudCbs != nil:
+			printQcloudCbsVolumeSource(pv.Spec.QcloudCbs, w)
 		default:
 			w.Write(LEVEL_1, "<unknown>\n")
 		}

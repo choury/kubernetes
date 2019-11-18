@@ -151,9 +151,12 @@ type VolumeSource struct {
 	// StorageOS represents a StorageOS volume attached and mounted on Kubernetes nodes.
 	// +optional
 	StorageOS *StorageOSVolumeSource `json:"storageos,omitempty" protobuf:"bytes,27,opt,name=storageos"`
+	// QcloudCbs represents a qcloud cbs data disk mount on the host and bind mount to the pod
+	// +optional
+	QcloudCbs *QcloudCbsVolumeSource `json:"qcloudCbs,omitempty" protobuf:"bytes,28,opt,name=qcloudCbs"`
 	// CSI (Container Storage Interface) represents storage that is handled by an external CSI driver (Alpha feature).
 	// +optional
-	CSI *CSIVolumeSource `json:"csi,omitempty" protobuf:"bytes,28,opt,name=csi"`
+	CSI *CSIVolumeSource `json:"csi,omitempty" protobuf:"bytes,29,opt,name=csi"`
 }
 
 // PersistentVolumeClaimVolumeSource references the user's PVC in the same namespace.
@@ -254,6 +257,9 @@ type PersistentVolumeSource struct {
 	// CSI represents storage that is handled by an external CSI driver (Beta feature).
 	// +optional
 	CSI *CSIPersistentVolumeSource `json:"csi,omitempty" protobuf:"bytes,22,opt,name=csi"`
+	// CloudCbs represents a qcloud cbs data disk mount on the host and bind mount to the pod
+	// +optional
+	QcloudCbs *QcloudCbsVolumeSource `json:"qcloudCbs,omitempty" protobuf:"bytes,23,opt,name=qcloudCbs"`
 }
 
 const (
@@ -1494,6 +1500,19 @@ type StorageOSPersistentVolumeSource struct {
 	// credentials.  If not specified, default values will be attempted.
 	// +optional
 	SecretRef *ObjectReference `json:"secretRef,omitempty" protobuf:"bytes,5,opt,name=secretRef"`
+}
+
+type QcloudCbsVolumeSource struct {
+	// Unique id of the persistent disk resource. Used to identify the disk in Qcloud
+	CbsDiskId string `json:"cbsDiskId" protobuf:"bytes,1,opt,name=cbsDiskId"`
+	// Filesystem type to mount.
+	// Must be a filesystem type supported by the host operating system.
+	// Ex. "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified.
+	// TODO: how do we prevent errors in the filesystem from compromising the machine
+	FSType string `json:"fsType,omitempty" protobuf:"bytes,2,opt,name=fsType"`
+	// Optional: Defaults to false (read/write). ReadOnly here will force
+	// the ReadOnly setting in VolumeMounts.
+	ReadOnly bool `json:"readOnly,omitempty" protobuf:"varint,3,opt,name=readOnly"`
 }
 
 // Adapts a ConfigMap into a volume.

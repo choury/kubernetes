@@ -661,10 +661,29 @@ func validateVolumeSource(source *core.VolumeSource, fldPath *field.Path, volNam
 		}
 	}
 
+	if source.QcloudCbs != nil {
+		if numVolumes > 0 {
+			allErrs = append(allErrs, field.Forbidden(fldPath.Child("qcloudCbs"),
+				"may not specify more than 1 volume type"))
+		} else {
+			numVolumes++
+			allErrs = append(allErrs,
+				validateQcloudDiskVolumeSource(source.QcloudCbs, fldPath.Child("qcloudCbs"))...)
+		}
+	}
+
 	if numVolumes == 0 {
 		allErrs = append(allErrs, field.Required(fldPath, "must specify a volume type"))
 	}
 
+	return allErrs
+}
+
+func validateQcloudDiskVolumeSource(cbsDisk *core.QcloudCbsVolumeSource, fldPath *field.Path) field.ErrorList {
+	allErrs := field.ErrorList{}
+	if cbsDisk.CbsDiskId == "" {
+		allErrs = append(allErrs, field.Required(fldPath.Child("cbsDiskId"), ""))
+	}
 	return allErrs
 }
 
@@ -1807,6 +1826,17 @@ func ValidatePersistentVolumeSpec(pvSpec *core.PersistentVolumeSpec, pvName stri
 		} else {
 			numVolumes++
 			allErrs = append(allErrs, validateCSIPersistentVolumeSource(pvSpec.CSI, fldPath.Child("csi"))...)
+		}
+	}
+
+	if pvSpec.QcloudCbs != nil {
+		if numVolumes > 0 {
+			allErrs = append(allErrs, field.Forbidden(fldPath.Child("qcloudCbs"),
+				"may not specify more than 1 volume type"))
+		} else {
+			numVolumes++
+			allErrs = append(allErrs,
+				validateQcloudDiskVolumeSource(pvSpec.QcloudCbs, fldPath.Child("qcloudCbs"))...)
 		}
 	}
 
@@ -5426,12 +5456,12 @@ func validateNonSpecialIP(ipAddress string, fldPath *field.Path) field.ErrorList
 	if ip.IsUnspecified() {
 		allErrs = append(allErrs, field.Invalid(fldPath, ipAddress, "may not be unspecified (0.0.0.0)"))
 	}
-	if ip.IsLoopback() {
-		allErrs = append(allErrs, field.Invalid(fldPath, ipAddress, "may not be in the loopback range (127.0.0.0/8)"))
-	}
-	if ip.IsLinkLocalUnicast() {
-		allErrs = append(allErrs, field.Invalid(fldPath, ipAddress, "may not be in the link-local range (169.254.0.0/16)"))
-	}
+//	if ip.IsLoopback() {
+//		allErrs = append(allErrs, field.Invalid(fldPath, ipAddress, "may not be in the loopback range (127.0.0.0/8)"))
+//	}
+//	if ip.IsLinkLocalUnicast() {
+//		allErrs = append(allErrs, field.Invalid(fldPath, ipAddress, "may not be in the link-local range (169.254.0.0/16)"))
+//	}
 	if ip.IsLinkLocalMulticast() {
 		allErrs = append(allErrs, field.Invalid(fldPath, ipAddress, "may not be in the link-local multicast range (224.0.0.0/24)"))
 	}
