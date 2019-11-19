@@ -61,16 +61,28 @@ done
 %clean
 rm -rf $RPM_BUILD_ROOT
 
+%package -n kubernetes-master-tk8s-bin
+Summary: An open source system for managing containerized applications across multiple hosts, providing basic mechanisms for deployment, maintenance, and scaling of applications.
+%description -n kubernetes-master-tk8s-bin
+kubernetes' binary of apiserver, controller-manager and scheduler
+
+
 %package -n kubernetes-master-tk8s
-Requires: systemd-units
+Requires: systemd-units, kubernetes-master-tk8s-bin
 Summary: An open source system for managing containerized applications across multiple hosts, providing basic mechanisms for deployment, maintenance, and scaling of applications.
 %description -n kubernetes-master-tk8s
 
-%package -n kubernetes-node-tk8s
+%package -n kubernetes-node-tk8s-bin
 Requires: iptables >= 1.4.21, conntrack-tools, ipset, ipvsadm
-Requires: systemd-units
+Summary: An open source system for managing containerized applications across multiple hosts, providing basic mechanisms for deployment, maintenance, and scaling of applications.
+%description -n kubernetes-node-tk8s-bin
+kubernetes' binary of kubelet and kube-proxy
+
+%package -n kubernetes-node-tk8s
+Requires: systemd-units, kubernetes-node-tk8s-bin
 Summary: An open source system for managing containerized applications across multiple hosts, providing basic mechanisms for deployment, maintenance, and scaling of applications.
 %description -n kubernetes-node-tk8s
+
 
 %package -n kubernetes-client-tk8s
 Summary: An open source system for managing containerized applications across multiple hosts, providing basic mechanisms for deployment, maintenance, and scaling of applications.
@@ -92,29 +104,30 @@ Summary: An open source system for managing containerized applications across mu
 /%{_bindir}/kube-scheduler
 /%{_bindir}/kubectl
 
+%files -n kubernetes-master-tk8s-bin
+/%{_bindir}/kube-apiserver
+/%{_bindir}/kube-controller-manager
+/%{_bindir}/kube-scheduler
+
 %files -n kubernetes-master-tk8s
 %config(noreplace,missingok) /etc/kubernetes/kube-apiserver
 %config(noreplace,missingok) /etc/kubernetes/kube-controller-manager
 %config(noreplace,missingok) /etc/kubernetes/kube-scheduler
 
 /%{_unitdir}/kube-apiserver.service
-/%{_bindir}/kube-apiserver
-
 /%{_unitdir}/kube-controller-manager.service
-/%{_bindir}/kube-controller-manager
-
 /%{_unitdir}/kube-scheduler.service
-/%{_bindir}/kube-scheduler
+
+%files -n kubernetes-node-tk8s-bin
+/%{_bindir}/kubelet
+/%{_bindir}/kube-proxy
 
 %files -n kubernetes-node-tk8s
 %config(noreplace,missingok) /etc/kubernetes/kube-proxy
 %config(noreplace,missingok) /etc/kubernetes/kubelet
 
 /%{_unitdir}/kube-proxy.service
-/%{_bindir}/kube-proxy
-
 /%{_unitdir}/kubelet.service
-/%{_bindir}/kubelet
 
 %files -n kubernetes-client-tk8s
 /%{_bindir}/kubectl
