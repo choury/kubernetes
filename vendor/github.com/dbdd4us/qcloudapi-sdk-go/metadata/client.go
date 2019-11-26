@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	glog "k8s.io/klog"
 )
 
 type Request struct {
@@ -132,6 +134,9 @@ func (m *MetaDataClient) send() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	glog.V(2).Infof("MetaDataClient send url %s",u)
+
 	requ, err := http.NewRequest(http.MethodGet, u, nil)
 
 	if err != nil {
@@ -150,6 +155,9 @@ func (m *MetaDataClient) send() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	glog.V(2).Infof("MetaDataClient send data %s",string(data))
+	
 	return string(data), nil
 
 }
