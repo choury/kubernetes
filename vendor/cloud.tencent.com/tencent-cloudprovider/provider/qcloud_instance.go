@@ -143,12 +143,15 @@ func (self *QCloud) NodeAddresses(ctx context.Context, name types.NodeName) ([]v
 		return nil, err
 	}
 
+	glog.Infof("QCloud Plugin NodeAddresses privateIp %s", privateIp)
+
 	addresses = append(addresses, v1.NodeAddress{
 		Type: v1.NodeInternalIP, Address: privateIp,
 	})
 
 	publicIp, err := self.metaData.PublicIPv4()
 	if err == nil && len(publicIp) > 0 {
+		glog.Infof("QCloud Plugin NodeAddresses publicIp %s", publicIp)
 		addresses = append(addresses, v1.NodeAddress{
 			Type: v1.NodeExternalIP, Address: publicIp,
 		})
@@ -169,6 +172,8 @@ func (self *QCloud) InstanceID(ctx context.Context, name types.NodeName) (string
 		return "", err
 	}
 
+	glog.Infof("QCloud Plugin InstanceID instanceId %s", instanceId)
+
 	zone, err := self.GetZone(ctx)
 	if err != nil {
 		return "", err
@@ -179,6 +184,9 @@ func (self *QCloud) InstanceID(ctx context.Context, name types.NodeName) (string
 
 //只在Master中调用
 func (self *QCloud) NodeAddressesByProviderID(ctx context.Context, providerID string) ([]v1.NodeAddress, error) {
+
+	glog.Infof("QCloud Plugin NodeAddressesByProviderID  %s", providerID)
+
 	instanceId, err := kubernetesInstanceID(providerID).mapToInstanceID()
 	if err != nil {
 		return nil, err
@@ -199,6 +207,8 @@ func (self *QCloud) NodeAddressesByProviderID(ctx context.Context, providerID st
 			Type: v1.NodeExternalIP, Address: publicIp,
 		})
 	}
+
+	glog.Infof("QCloud Plugin NodeAddressesByProviderID addresses %v", addresses)
 
 	return addresses, nil
 }
