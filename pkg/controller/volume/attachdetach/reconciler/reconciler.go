@@ -35,6 +35,7 @@ import (
 	kevents "k8s.io/kubernetes/pkg/kubelet/events"
 	"k8s.io/kubernetes/pkg/util/goroutinemap/exponentialbackoff"
 	"k8s.io/kubernetes/pkg/volume"
+	"k8s.io/kubernetes/pkg/volume/util/nestedpendingoperations"
 	"k8s.io/kubernetes/pkg/volume/util/operationexecutor"
 )
 
@@ -231,11 +232,17 @@ func (rc *reconciler) reconcile() {
 					metrics.RecordForcedDetachMetric()
 					klog.Warningf(attachedVolume.GenerateMsgDetailed("attacherDetacher.DetachVolume started", fmt.Sprintf("This volume is not safe to detach, but maxWaitForUnmountDuration %v expired, force detaching", rc.maxWaitForUnmountDuration)))
 				}
-			}
-			if err != nil && !exponentialbackoff.IsExponentialBackoff(err) {
-				// Ignore exponentialbackoff.IsExponentialBackoff errors, they are expected.
-				// Log all other errors.
-				klog.Errorf(attachedVolume.GenerateErrorDetailed("attacherDetacher.DetachVolume failed to start", err).Error())
+			} else {
+				if !nestedpendingoperations.IsAlreadyExists(err) {
+					// add volume back to ReportAsAttached list
+					klog.Infof("Error %v happened on node %s, should add %s back to attached list", err, attachedVolume.AttachedVolume.NodeName, attachedVolume.AttachedVolume.VolumeName)
+					rc.actualStateOfWorld.AddVolumeToReportAsAttached(attachedVolume.VolumeName, attachedVolume.NodeName)
+				}
+				if !exponentialbackoff.IsExponentialBackoff(err) {
+					// Ignore exponentialbackoff.IsExponentialBackoff errors, they are expected.
+					// Log all other errors.
+					klog.Errorf(attachedVolume.GenerateErrorDetailed("attacherDetacher.DetachVolume failed to start", err).Error())
+				}
 			}
 		}
 	}
