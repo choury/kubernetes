@@ -19,12 +19,15 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
 	goruntime "runtime"
+
+	clientset "k8s.io/client-go/kubernetes"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -155,19 +158,19 @@ func Run(c schedulerserverconfig.CompletedConfig, stopCh <-chan struct{}) error 
 	// Start up the healthz server.
 	if c.InsecureServing != nil {
 		separateMetrics := c.InsecureMetricsServing != nil
-		handler := buildHandlerChain(newHealthzHandler(&c.ComponentConfig, separateMetrics), nil, nil)
+		handler := buildHandlerChain(newHealthzHandler(&c.ComponentConfig, separateMetrics, sched, c.Client), nil, nil)
 		if err := c.InsecureServing.Serve(handler, 0, stopCh); err != nil {
 			return fmt.Errorf("failed to start healthz server: %v", err)
 		}
 	}
 	if c.InsecureMetricsServing != nil {
-		handler := buildHandlerChain(newMetricsHandler(&c.ComponentConfig), nil, nil)
+		handler := buildHandlerChain(newMetricsHandler(&c.ComponentConfig, c.Client), nil, nil)
 		if err := c.InsecureMetricsServing.Serve(handler, 0, stopCh); err != nil {
 			return fmt.Errorf("failed to start metrics server: %v", err)
 		}
 	}
 	if c.SecureServing != nil {
-		handler := buildHandlerChain(newHealthzHandler(&c.ComponentConfig, false), c.Authentication.Authenticator, c.Authorization.Authorizer)
+		handler := buildHandlerChain(newHealthzHandler(&c.ComponentConfig, false, sched, c.Client), c.Authentication.Authenticator, c.Authorization.Authorizer)
 		if err := c.SecureServing.Serve(handler, 0, stopCh); err != nil {
 			// fail early for secure handlers, removing the old error loop from above
 			return fmt.Errorf("failed to start healthz server: %v", err)
@@ -236,7 +239,7 @@ func buildHandlerChain(handler http.Handler, authn authenticator.Request, authz 
 	return handler
 }
 
-func installMetricHandler(pathRecorderMux *mux.PathRecorderMux) {
+func installMetricHandler(pathRecorderMux *mux.PathRecorderMux, sched *scheduler.Scheduler, inClient clientset.Interface) {
 	configz.InstallHandler(pathRecorderMux)
 	defaultMetricsHandler := prometheus.Handler().ServeHTTP
 	pathRecorderMux.HandleFunc("/metrics", func(w http.ResponseWriter, req *http.Request) {
@@ -247,12 +250,78 @@ func installMetricHandler(pathRecorderMux *mux.PathRecorderMux) {
 		}
 		defaultMetricsHandler(w, req)
 	})
+
+	if sched != nil {
+		pathRecorderMux.HandleFunc("/debug/node/cached", func(w http.ResponseWriter, req *http.Request) {
+			hostname := req.URL.Query().Get("hostname")
+			if hostname == ""{
+				w.Write([]byte("hostname input nil"))
+				return
+			}
+
+			nodesInfos := sched.Cache().GetCachedNodeInfos(hostname)
+			if nodesInfos == nil{
+				msg := "Get scheduler cache node Infos nil"
+				glog.V(1).Infof(msg)
+				w.Write([]byte(msg))
+				return
+			}
+
+			nodeInfo, err := json.Marshal(nodesInfos)
+			if err !=  nil{
+				msg := fmt.Sprintf("Marshal nodes infos err : %+v", err)
+				glog.Errorf(msg)
+				w.Write([]byte(msg))
+				return
+			}
+
+			w.Write(nodeInfo)
+		})
+
+		pathRecorderMux.HandleFunc("/debug/node/resource", func(w http.ResponseWriter, req *http.Request) {
+			resourceInfos := sched.Cache().GetCachedResourceInfos()
+			if resourceInfos == nil{
+				msg := "Get scheduler cache node resource infos nil"
+				glog.V(1).Infof(msg)
+				w.Write([]byte(msg))
+				return
+			}
+
+			nodeInfo, err := json.Marshal(resourceInfos)
+			if err !=  nil{
+				msg := fmt.Sprintf("Marshal nodes resource infos err : %+v", err)
+				glog.Errorf(msg)
+				w.Write([]byte(msg))
+				return
+			}
+			w.Write(nodeInfo)
+		})
+
+		pathRecorderMux.HandleFunc("/debug/api/node/resource", func(w http.ResponseWriter, req *http.Request) {
+			nodeResourceInfos, err := sched.GetNodeResourceInfos(inClient)
+			if err != nil{
+				msg := fmt.Sprintf("Get node list form kube-apiserver err : %+v", err)
+				glog.V(1).Infof(msg)
+				w.Write([]byte(msg))
+				return
+			}
+
+			nodesInfos, err := json.Marshal(nodeResourceInfos)
+			if err !=  nil{
+				msg := fmt.Sprintf("Marshal node list form kube-apiserver err : %+v", err)
+				glog.Errorf(msg)
+				w.Write([]byte(msg))
+				return
+			}
+			w.Write(nodesInfos)
+		})
+	}
 }
 
 // newMetricsHandler builds a metrics server from the config.
-func newMetricsHandler(config *kubeschedulerconfig.KubeSchedulerConfiguration) http.Handler {
+func newMetricsHandler(config *kubeschedulerconfig.KubeSchedulerConfiguration, inClient clientset.Interface) http.Handler {
 	pathRecorderMux := mux.NewPathRecorderMux("kube-scheduler")
-	installMetricHandler(pathRecorderMux)
+	installMetricHandler(pathRecorderMux, nil, inClient)
 	if config.EnableProfiling {
 		routes.Profiling{}.Install(pathRecorderMux)
 		if config.EnableContentionProfiling {
@@ -265,11 +334,11 @@ func newMetricsHandler(config *kubeschedulerconfig.KubeSchedulerConfiguration) h
 // newHealthzServer creates a healthz server from the config, and will also
 // embed the metrics handler if the healthz and metrics address configurations
 // are the same.
-func newHealthzHandler(config *kubeschedulerconfig.KubeSchedulerConfiguration, separateMetrics bool) http.Handler {
+func newHealthzHandler(config *kubeschedulerconfig.KubeSchedulerConfiguration, separateMetrics bool, sched *scheduler.Scheduler,  inClient clientset.Interface) http.Handler {
 	pathRecorderMux := mux.NewPathRecorderMux("kube-scheduler")
 	healthz.InstallHandler(pathRecorderMux)
 	if !separateMetrics {
-		installMetricHandler(pathRecorderMux)
+		installMetricHandler(pathRecorderMux, sched, inClient)
 	}
 	if config.EnableProfiling {
 		routes.Profiling{}.Install(pathRecorderMux)
