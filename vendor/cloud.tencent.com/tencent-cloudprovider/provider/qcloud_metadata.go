@@ -85,6 +85,10 @@ func (cached *metaDataCached) InstanceID() (string, error) {
 		return "", err
 	}
 
+	if rsp == "" {
+		return "",fmt.Errorf("InstanceID cannot be empty")
+	}
+
 	cached.instanceId = rsp
 	cached.instanceIdLastUpdateTime = time.Now()
 
