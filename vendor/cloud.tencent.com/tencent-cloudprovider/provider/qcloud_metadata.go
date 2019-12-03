@@ -46,6 +46,11 @@ func (cached *metaDataCached) InstanceID() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	if rsp == "" {
+		return "",fmt.Sprintf("InstanceID cannot be empty")
+	}
+
 	cached.instanceId = rsp
 	return cached.instanceId, nil
 }
@@ -57,6 +62,10 @@ func (cached *metaDataCached) PrivateIPv4() (string, error) {
 	rsp, err := cached.metaData.PrivateIPv4()
 	if err != nil {
 		return "", err
+	}
+
+	if rsp == "" {
+		return "",err.Error("PrivateIPv4 cannot be empty")
 	}
 
 	cached.privateIPv4 = rsp
