@@ -146,9 +146,12 @@ func (m *MetaDataClient) send() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	glog.V(2).Infof("MetaDataClient StatusCode %d",resp.StatusCode)
+
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return "", err
+		return "", fmt.Errorf("MetaDataClient StatusCode %d",resp.StatusCode)
 	}
 
 	data, err := ioutil.ReadAll(resp.Body)
@@ -187,6 +190,8 @@ func shouldRetry(err error) bool {
 	if err == nil {
 		return false
 	}
+
+	glog.Errorf("MetaDataClient shouldRetry %s",err.Error())
 
 	_, ok := err.(TimeoutError)
 	if ok {
