@@ -136,6 +136,8 @@ func (cached *metaDataCached) PublicIPv4() (string, error) {
 		return *(cached.publicIPv4), nil
 	}
 
+	cached.publicIPv4LastUpdateTime = time.Now()
+	
 	rsp, err := cached.metaData.PublicIPv4()
 	if err != nil {
 		glog.Errorf("metaDataCached PublicIPv4() get err :%s", err.Error())
@@ -148,7 +150,6 @@ func (cached *metaDataCached) PublicIPv4() (string, error) {
 	}
 
 	cached.publicIPv4 = &rsp
-	cached.publicIPv4LastUpdateTime = time.Now()
-
+	
 	return *cached.publicIPv4, nil
 }
