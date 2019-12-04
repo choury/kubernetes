@@ -30,9 +30,8 @@ const (
 )
 
 type IMetaDataClient interface {
-	Resource(resource string) IMetaDataClient
-	Go() (string, error)
-	Url() (string, error)
+	Go(resource string) (string, error)
+	Url(resource string) (string, error)
 }
 
 type MetaData struct {
@@ -50,7 +49,7 @@ func NewMetaData(client *http.Client) *MetaData {
 
 func (m *MetaData) UUID() (string, error) {
 
-	uuid, err := m.c.Resource(UUID).Go()
+	uuid, err := m.c.Go(UUID)
 	if err != nil {
 		return "", err
 	}
@@ -59,7 +58,7 @@ func (m *MetaData) UUID() (string, error) {
 
 func (m *MetaData) InstanceID() (string, error) {
 
-	instanceId, err := m.c.Resource(INSTANCE_ID).Go()
+	instanceId, err := m.c.Go(INSTANCE_ID)
 	if err != nil {
 		return "", err
 	}
@@ -68,7 +67,7 @@ func (m *MetaData) InstanceID() (string, error) {
 
 func (m *MetaData) Mac() (string, error) {
 
-	mac, err := m.c.Resource(MAC).Go()
+	mac, err := m.c.Go(MAC)
 	if err != nil {
 		return "", err
 	}
@@ -77,7 +76,7 @@ func (m *MetaData) Mac() (string, error) {
 
 func (m *MetaData) PrivateIPv4() (string, error) {
 
-	ip, err := m.c.Resource(PRIVATE_IPV4).Go()
+	ip, err := m.c.Go(PRIVATE_IPV4)
 	if err != nil {
 		return "", err
 	}
@@ -86,7 +85,7 @@ func (m *MetaData) PrivateIPv4() (string, error) {
 
 func (m *MetaData) PublicIPv4() (string, error) {
 
-	ip, err := m.c.Resource(PUBLIC_IPV4).Go()
+	ip, err := m.c.Go(PUBLIC_IPV4)
 	if err != nil {
 		return "", err
 	}
@@ -95,7 +94,7 @@ func (m *MetaData) PublicIPv4() (string, error) {
 
 func (m *MetaData) Region() (string, error) {
 
-	region, err := m.c.Resource(REGION).Go()
+	region, err := m.c.Go(REGION)
 	if err != nil {
 		return "", err
 	}
@@ -104,7 +103,7 @@ func (m *MetaData) Region() (string, error) {
 
 func (m *MetaData) Zone() (string, error) {
 
-	zone, err := m.c.Resource(ZONE).Go()
+	zone, err := m.c.Go(ZONE)
 	if err != nil {
 		return "", err
 	}
@@ -113,24 +112,18 @@ func (m *MetaData) Zone() (string, error) {
 
 //
 type MetaDataClient struct {
-	resource string
 	client   *http.Client
 }
 
-func (m *MetaDataClient) Resource(resource string) IMetaDataClient {
-	m.resource = resource
-	return m
-}
-
-func (m *MetaDataClient) Url() (string, error) {
-	if m.resource == "" {
+func (m *MetaDataClient) Url(resource string) (string, error) {
+	if resource == "" {
 		return "", errors.New("the resource you want to visit must not be nil!")
 	}
-	return fmt.Sprintf("%s/%s", ENDPOINT, m.resource), nil
+	return fmt.Sprintf("%s/%s", ENDPOINT, resource), nil
 }
 
-func (m *MetaDataClient) send() (string, error) {
-	u, err := m.Url()
+func (m *MetaDataClient) send(resource string) (string, error) {
+	u, err := m.Url(resource)
 	if err != nil {
 		return "", err
 	}
@@ -172,9 +165,9 @@ var retry = AttemptStrategy{
 	Delay: 200 * time.Millisecond,
 }
 
-func (vpc *MetaDataClient) Go() (resu string, err error) {
+func (vpc *MetaDataClient) Go(resource string) (resu string, err error) {
 	for r := retry.Start(); r.Next(); {
-		resu, err = vpc.send()
+		resu, err = vpc.send(resource)
 		if !shouldRetry(err) {
 			break
 		}
