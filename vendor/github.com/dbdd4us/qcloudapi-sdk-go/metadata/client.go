@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+	"reflect"
 
 	"github.com/golang/glog"
 )
@@ -163,9 +164,9 @@ func (m *MetaDataClient) send(resource string) (string, error) {
 }
 
 var retry = AttemptStrategy{
-	Min:   5,
+	Min:   1,
 	Total: 5 * time.Second,
-	Delay: 200 * time.Millisecond,
+	Delay: 1 * time.Second,
 }
 
 func (vpc *MetaDataClient) Go(resource string) (resu string, err error) {
@@ -188,11 +189,16 @@ func shouldRetry(err error) bool {
 		return false
 	}
 
-	glog.Errorf("MetaDataClient shouldRetry %s",err.Error())
+	glog.Errorf("MetaDataClient shouldRetry %s err: #v",err.Error(),err)
 
-	_, ok := err.(TimeoutError)
+	timeoutErr, ok := err.(TimeoutError)
 	if ok {
-		return true
+		if !reflect.ValueOf(timeoutErr).IsNil(){
+			if timeoutErr.Timeout() {
+				glog.Errorf("MetaDataClient shouldRetry timeout error,not retry")
+				return false
+			}
+		}
 	}
 
 	switch err {
