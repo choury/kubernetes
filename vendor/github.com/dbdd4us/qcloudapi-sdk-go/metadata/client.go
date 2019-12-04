@@ -38,10 +38,13 @@ type MetaData struct {
 	c IMetaDataClient
 }
 
-func NewMetaData(client *http.Client) *MetaData {
+func NewMetaData(client *http.Client,timeout uint64) *MetaData {
 	if client == nil {
-		client = &http.Client{}
+		client = &http.Client{
+			Timeout: time.Duration(time.Duration(timeout) * time.Second),
+		}
 	}
+	
 	return &MetaData{
 		c: &MetaDataClient{client: client},
 	}
@@ -144,7 +147,7 @@ func (m *MetaDataClient) send(resource string) (string, error) {
 
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("MetaDataClient resource %s  StatusCode %d",resource,resp.StatusCode)
+		return "", fmt.Errorf("MetaDataClient resource %s  StatusCode %d error",resource,resp.StatusCode)
 	}
 
 	data, err := ioutil.ReadAll(resp.Body)
