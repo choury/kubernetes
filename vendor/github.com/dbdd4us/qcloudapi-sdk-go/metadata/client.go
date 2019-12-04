@@ -128,7 +128,7 @@ func (m *MetaDataClient) send(resource string) (string, error) {
 		return "", err
 	}
 
-	glog.V(2).Infof("MetaDataClient send url %s",u)
+	glog.V(2).Infof("MetaDataClient send resource %s  url %s",resource,u)
 
 	requ, err := http.NewRequest(http.MethodGet, u, nil)
 
@@ -140,11 +140,11 @@ func (m *MetaDataClient) send(resource string) (string, error) {
 		return "", err
 	}
 
-	glog.V(2).Infof("MetaDataClient StatusCode %d",resp.StatusCode)
+	glog.V(2).Infof("MetaDataClient resource %s StatusCode %d",resource,resp.StatusCode)
 
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("MetaDataClient StatusCode %d",resp.StatusCode)
+		return "", fmt.Errorf("MetaDataClient resource %s  StatusCode %d",resource,resp.StatusCode)
 	}
 
 	data, err := ioutil.ReadAll(resp.Body)
@@ -152,7 +152,7 @@ func (m *MetaDataClient) send(resource string) (string, error) {
 		return "", err
 	}
 
-	glog.V(2).Infof("MetaDataClient send data %s",string(data))
+	glog.V(2).Infof("MetaDataClient resource %s send data %s",resource,string(data))
 	
 	return string(data), nil
 
