@@ -149,17 +149,14 @@ func (kl *Kubelet) tryRegisterWithAPIServer(node *v1.Node) bool {
 		return true
 	}
 
-	glog.Errorf(
-		"Previously node %q had externalID %q; now it is %q; will delete and recreate.",
+	// Record an error instead of deleting the node when its externalID changed,
+	// due to some unexpected reason, such as failed to fetch metadata caused by unstable network.
+	glog.Errorf("Previously node %q had externalID %q; now it is %q.",
 		kl.nodeName, node.Spec.ExternalID, existingNode.Spec.ExternalID,
 	)
-	if err := kl.kubeClient.Core().Nodes().Delete(node.Name, nil); err != nil {
-		glog.Errorf("Unable to register node %q with API server: error deleting old node: %v", kl.nodeName, err)
-	} else {
-		glog.Infof("Deleted old node object %q", kl.nodeName)
-	}
 
-	return false
+	// Defer the registration to next sync loop.
+	return true
 }
 
 // updateDefaultLabels will set the default labels on the node
