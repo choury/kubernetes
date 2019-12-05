@@ -10,6 +10,9 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+	"reflect"
+
+	"github.com/golang/glog"
 )
 
 type Request struct {
@@ -28,19 +31,21 @@ const (
 )
 
 type IMetaDataClient interface {
-	Resource(resource string) IMetaDataClient
-	Go() (string, error)
-	Url() (string, error)
+	Go(resource string) (string, error)
+	Url(resource string) (string, error)
 }
 
 type MetaData struct {
 	c IMetaDataClient
 }
 
-func NewMetaData(client *http.Client) *MetaData {
+func NewMetaData(client *http.Client,timeout uint64) *MetaData {
 	if client == nil {
-		client = &http.Client{}
+		client = &http.Client{
+			Timeout: time.Duration(time.Duration(timeout) * time.Second),
+		}
 	}
+	
 	return &MetaData{
 		c: &MetaDataClient{client: client},
 	}
@@ -48,7 +53,7 @@ func NewMetaData(client *http.Client) *MetaData {
 
 func (m *MetaData) UUID() (string, error) {
 
-	uuid, err := m.c.Resource(UUID).Go()
+	uuid, err := m.c.Go(UUID)
 	if err != nil {
 		return "", err
 	}
@@ -57,7 +62,7 @@ func (m *MetaData) UUID() (string, error) {
 
 func (m *MetaData) InstanceID() (string, error) {
 
-	instanceId, err := m.c.Resource(INSTANCE_ID).Go()
+	instanceId, err := m.c.Go(INSTANCE_ID)
 	if err != nil {
 		return "", err
 	}
@@ -66,7 +71,7 @@ func (m *MetaData) InstanceID() (string, error) {
 
 func (m *MetaData) Mac() (string, error) {
 
-	mac, err := m.c.Resource(MAC).Go()
+	mac, err := m.c.Go(MAC)
 	if err != nil {
 		return "", err
 	}
@@ -75,7 +80,7 @@ func (m *MetaData) Mac() (string, error) {
 
 func (m *MetaData) PrivateIPv4() (string, error) {
 
-	ip, err := m.c.Resource(PRIVATE_IPV4).Go()
+	ip, err := m.c.Go(PRIVATE_IPV4)
 	if err != nil {
 		return "", err
 	}
@@ -84,7 +89,7 @@ func (m *MetaData) PrivateIPv4() (string, error) {
 
 func (m *MetaData) PublicIPv4() (string, error) {
 
-	ip, err := m.c.Resource(PUBLIC_IPV4).Go()
+	ip, err := m.c.Go(PUBLIC_IPV4)
 	if err != nil {
 		return "", err
 	}
@@ -93,7 +98,7 @@ func (m *MetaData) PublicIPv4() (string, error) {
 
 func (m *MetaData) Region() (string, error) {
 
-	region, err := m.c.Resource(REGION).Go()
+	region, err := m.c.Go(REGION)
 	if err != nil {
 		return "", err
 	}
@@ -102,7 +107,7 @@ func (m *MetaData) Region() (string, error) {
 
 func (m *MetaData) Zone() (string, error) {
 
-	zone, err := m.c.Resource(ZONE).Go()
+	zone, err := m.c.Go(ZONE)
 	if err != nil {
 		return "", err
 	}
@@ -111,27 +116,24 @@ func (m *MetaData) Zone() (string, error) {
 
 //
 type MetaDataClient struct {
-	resource string
 	client   *http.Client
 }
 
-func (m *MetaDataClient) Resource(resource string) IMetaDataClient {
-	m.resource = resource
-	return m
-}
-
-func (m *MetaDataClient) Url() (string, error) {
-	if m.resource == "" {
+func (m *MetaDataClient) Url(resource string) (string, error) {
+	if resource == "" {
 		return "", errors.New("the resource you want to visit must not be nil!")
 	}
-	return fmt.Sprintf("%s/%s", ENDPOINT, m.resource), nil
+	return fmt.Sprintf("%s/%s", ENDPOINT, resource), nil
 }
 
-func (m *MetaDataClient) send() (string, error) {
-	u, err := m.Url()
+func (m *MetaDataClient) send(resource string) (string, error) {
+	u, err := m.Url(resource)
 	if err != nil {
 		return "", err
 	}
+
+	glog.V(2).Infof("MetaDataClient send resource %s  url %s",resource,u)
+
 	requ, err := http.NewRequest(http.MethodGet, u, nil)
 
 	if err != nil {
@@ -141,8 +143,12 @@ func (m *MetaDataClient) send() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	glog.V(2).Infof("MetaDataClient resource %s StatusCode %d",resource,resp.StatusCode)
+
+	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return "", err
+		return "", fmt.Errorf("MetaDataClient resource %s  StatusCode %d error",resource,resp.StatusCode)
 	}
 	defer resp.Body.Close()
 
@@ -150,19 +156,22 @@ func (m *MetaDataClient) send() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	glog.V(2).Infof("MetaDataClient resource %s send data %s",resource,string(data))
+	
 	return string(data), nil
 
 }
 
 var retry = AttemptStrategy{
-	Min:   5,
+	Min:   1,
 	Total: 5 * time.Second,
-	Delay: 200 * time.Millisecond,
+	Delay: 1 * time.Second,
 }
 
-func (vpc *MetaDataClient) Go() (resu string, err error) {
+func (vpc *MetaDataClient) Go(resource string) (resu string, err error) {
 	for r := retry.Start(); r.Next(); {
-		resu, err = vpc.send()
+		resu, err = vpc.send(resource)
 		if !shouldRetry(err) {
 			break
 		}
@@ -180,9 +189,16 @@ func shouldRetry(err error) bool {
 		return false
 	}
 
-	_, ok := err.(TimeoutError)
+	glog.Errorf("MetaDataClient shouldRetry %s err: #v",err.Error(),err)
+
+	timeoutErr, ok := err.(TimeoutError)
 	if ok {
-		return true
+		if !reflect.ValueOf(timeoutErr).IsNil(){
+			if timeoutErr.Timeout() {
+				glog.Errorf("MetaDataClient shouldRetry timeout error,not retry")
+				return false
+			}
+		}
 	}
 
 	switch err {
