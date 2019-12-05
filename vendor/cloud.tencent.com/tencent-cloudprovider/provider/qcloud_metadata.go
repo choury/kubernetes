@@ -27,8 +27,10 @@ import (
 )
 
 const (
-	EXPIRE_TIME_SECOND_NAME    = "ExpireTimeSecond"
-	DEFAULT_EXPIRE_TIME_SECOND = 15 * 60
+	EXPIRE_TIME_SECOND_NAME     = "ExpireTimeSecond"
+	DEFAULT_EXPIRE_TIME_SECOND  = 15 * 60
+	TIMEOUT_SECOND_NAME         = "TimeoutSecond"
+	DEFAULT_TIMEOUT_SECOND_NAME = 5
 )
 
 //避免对metadata服务的强依赖
@@ -41,41 +43,59 @@ type metaDataCached struct {
 	privateIPv4 string
 	publicIPv4  *string // 可能为nil
 
-	instanceIdLastUpdateTime  time.Time
-	publicIPv4LastUpdateTime  time.Time
-	privateIPv4LastUpdateTime time.Time
-	expireTimeSecond          int64
+	publicIPv4LastUpdateTime time.Time
+	expireTimeSecond         int64
 }
 
 func newMetaDataCached() *metaDataCached {
 
 	var expireTimeSecond = int64(DEFAULT_EXPIRE_TIME_SECOND)
+	var timeoutSecond = uint64(DEFAULT_TIMEOUT_SECOND_NAME)
 
-	if envStr := os.Getenv(EXPIRE_TIME_SECOND_NAME); envStr != "" {
-		glog.Infof("EXPIRE_TIME_SECOND_NAME: %s env is %s ", EXPIRE_TIME_SECOND_NAME, envStr)
-		value, err := strconv.ParseInt(envStr, 10, 64)
-		if err != nil {
-			glog.Warningf("EXPIRE_TIME_SECOND_NAME envStr %s transfer failed,err:%s", envStr, err.Error())
-		} else {
-			if value > 0 {
-				expireTimeSecond = value
+	{
+		if envStr := os.Getenv(EXPIRE_TIME_SECOND_NAME); envStr != "" {
+			glog.Infof("EXPIRE_TIME_SECOND_NAME: %s env is %s ", EXPIRE_TIME_SECOND_NAME, envStr)
+			value, err := strconv.ParseInt(envStr, 10, 64)
+			if err != nil {
+				glog.Warningf("EXPIRE_TIME_SECOND_NAME envStr %s transfer failed,err:%s", envStr, err.Error())
+			} else {
+				if value > 0 {
+					expireTimeSecond = value
+				}
 			}
+		} else {
+			glog.Infof("EXPIRE_TIME_SECOND_NAME: %s env is  empty ", EXPIRE_TIME_SECOND_NAME)
 		}
-	} else {
-		glog.Infof("EXPIRE_TIME_SECOND_NAME: %s env is  empty ", EXPIRE_TIME_SECOND_NAME)
+
+		glog.Infof("expireTimeSecond %d", expireTimeSecond)
 	}
 
-	glog.Infof("expireTimeSecond %d", expireTimeSecond)
+	{
+		if envTimeoutStr := os.Getenv(TIMEOUT_SECOND_NAME); envTimeoutStr != "" {
+			glog.Infof("TIMEOUT_SECOND_NAME: %s env is %s ", TIMEOUT_SECOND_NAME, envTimeoutStr)
+			value, err := strconv.ParseUint(envTimeoutStr, 10, 64)
+			if err != nil {
+				glog.Warningf("TIMEOUT_SECOND_NAME envTimeoutStr %s transfer failed,err:%s", envTimeoutStr, err.Error())
+			} else {
+				if value > uint64(0) {
+					timeoutSecond = value
+				}
+			}
+		} else {
+			glog.Infof("TIMEOUT_SECOND_NAME: %s env is  empty ", TIMEOUT_SECOND_NAME)
+		}
+
+		glog.Infof("timeoutSecond %d", timeoutSecond)
+	}
 
 	return &metaDataCached{
-		metaData:         metadata.NewMetaData(nil),
+		metaData:         metadata.NewMetaData(nil, timeoutSecond),
 		expireTimeSecond: expireTimeSecond,
 	}
 }
 
 func (cached *metaDataCached) InstanceID() (string, error) {
-	if (cached.instanceId != "") &&
-		cached.instanceIdLastUpdateTime.Add(time.Duration(cached.expireTimeSecond)*time.Second).After(time.Now()) {
+	if cached.instanceId != "" {
 		return cached.instanceId, nil
 	}
 
@@ -85,15 +105,17 @@ func (cached *metaDataCached) InstanceID() (string, error) {
 		return "", err
 	}
 
+	if rsp == "" {
+		return "", fmt.Errorf("InstanceID cannot be empty")
+	}
+
 	cached.instanceId = rsp
-	cached.instanceIdLastUpdateTime = time.Now()
 
 	return cached.instanceId, nil
 }
 
 func (cached *metaDataCached) PrivateIPv4() (string, error) {
-	if (cached.privateIPv4 != "") &&
-		cached.privateIPv4LastUpdateTime.Add(time.Duration(cached.expireTimeSecond)*time.Second).After(time.Now()) {
+	if cached.privateIPv4 != "" {
 		return cached.privateIPv4, nil
 	}
 
@@ -109,7 +131,6 @@ func (cached *metaDataCached) PrivateIPv4() (string, error) {
 	}
 
 	cached.privateIPv4 = rsp
-	cached.privateIPv4LastUpdateTime = time.Now()
 
 	return cached.privateIPv4, nil
 }
@@ -122,14 +143,20 @@ func (cached *metaDataCached) PublicIPv4() (string, error) {
 		return *(cached.publicIPv4), nil
 	}
 
+	cached.publicIPv4LastUpdateTime = time.Now()
+
 	rsp, err := cached.metaData.PublicIPv4()
 	if err != nil {
-		glog.Errorf("metaData.PublicIPv4() get err :%s", err.Error())
-		return "", err
+		glog.Errorf("metaDataCached PublicIPv4() get err :%s", err.Error())
+		if cached.publicIPv4 == nil {
+			return "", err
+		} else {
+			glog.Warningf("metaDataCached PublicIPv4(), use cached: %s", *(cached.publicIPv4))
+			return *(cached.publicIPv4), nil
+		}
 	}
 
 	cached.publicIPv4 = &rsp
-	cached.publicIPv4LastUpdateTime = time.Now()
 
 	return *cached.publicIPv4, nil
 }
