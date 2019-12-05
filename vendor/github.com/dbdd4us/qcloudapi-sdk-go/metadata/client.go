@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+	"reflect"
 
 	"github.com/golang/glog"
 )
@@ -38,10 +39,13 @@ type MetaData struct {
 	c IMetaDataClient
 }
 
-func NewMetaData(client *http.Client) *MetaData {
+func NewMetaData(client *http.Client,timeout uint64) *MetaData {
 	if client == nil {
-		client = &http.Client{}
+		client = &http.Client{
+			Timeout: time.Duration(time.Duration(timeout) * time.Second),
+		}
 	}
+	
 	return &MetaData{
 		c: &MetaDataClient{client: client},
 	}
@@ -144,7 +148,7 @@ func (m *MetaDataClient) send(resource string) (string, error) {
 
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("MetaDataClient resource %s  StatusCode %d",resource,resp.StatusCode)
+		return "", fmt.Errorf("MetaDataClient resource %s  StatusCode %d error",resource,resp.StatusCode)
 	}
 
 	data, err := ioutil.ReadAll(resp.Body)
@@ -159,9 +163,9 @@ func (m *MetaDataClient) send(resource string) (string, error) {
 }
 
 var retry = AttemptStrategy{
-	Min:   5,
+	Min:   1,
 	Total: 5 * time.Second,
-	Delay: 200 * time.Millisecond,
+	Delay: 1 * time.Second,
 }
 
 func (vpc *MetaDataClient) Go(resource string) (resu string, err error) {
@@ -184,11 +188,16 @@ func shouldRetry(err error) bool {
 		return false
 	}
 
-	glog.Errorf("MetaDataClient shouldRetry %s",err.Error())
+	glog.Errorf("MetaDataClient shouldRetry %s err: #v",err.Error(),err)
 
-	_, ok := err.(TimeoutError)
+	timeoutErr, ok := err.(TimeoutError)
 	if ok {
-		return true
+		if !reflect.ValueOf(timeoutErr).IsNil(){
+			if timeoutErr.Timeout() {
+				glog.Errorf("MetaDataClient shouldRetry timeout error,not retry")
+				return false
+			}
+		}
 	}
 
 	switch err {
