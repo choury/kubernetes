@@ -27,9 +27,9 @@ import (
 )
 
 const (
-	EXPIRE_TIME_SECOND_NAME    = "ExpireTimeSecond"
-	DEFAULT_EXPIRE_TIME_SECOND = 15 * 60
-	TIMEOUT_SECOND_NAME    = "TimeoutSecond"
+	EXPIRE_TIME_SECOND_NAME     = "ExpireTimeSecond"
+	DEFAULT_EXPIRE_TIME_SECOND  = 15 * 60
+	TIMEOUT_SECOND_NAME         = "TimeoutSecond"
 	DEFAULT_TIMEOUT_SECOND_NAME = 5
 )
 
@@ -43,10 +43,8 @@ type metaDataCached struct {
 	privateIPv4 string
 	publicIPv4  *string // 可能为nil
 
-	instanceIdLastUpdateTime  time.Time
-	publicIPv4LastUpdateTime  time.Time
-	privateIPv4LastUpdateTime time.Time
-	expireTimeSecond          int64
+	publicIPv4LastUpdateTime time.Time
+	expireTimeSecond         int64
 }
 
 func newMetaDataCached() *metaDataCached {
@@ -90,16 +88,14 @@ func newMetaDataCached() *metaDataCached {
 		glog.Infof("timeoutSecond %d", timeoutSecond)
 	}
 
-
 	return &metaDataCached{
-		metaData: metadata.NewMetaData(nil,timeoutSecond),
-		expireTimeSecond:expireTimeSecond,
+		metaData:         metadata.NewMetaData(nil, timeoutSecond),
+		expireTimeSecond: expireTimeSecond,
 	}
 }
 
 func (cached *metaDataCached) InstanceID() (string, error) {
-	if (cached.instanceId != "") &&
-		cached.instanceIdLastUpdateTime.Add(time.Duration(cached.expireTimeSecond)*time.Second).After(time.Now()) {
+	if cached.instanceId != "" {
 		return cached.instanceId, nil
 	}
 
@@ -110,18 +106,16 @@ func (cached *metaDataCached) InstanceID() (string, error) {
 	}
 
 	if rsp == "" {
-		return "",fmt.Errorf("InstanceID cannot be empty")
+		return "", fmt.Errorf("InstanceID cannot be empty")
 	}
 
 	cached.instanceId = rsp
-	cached.instanceIdLastUpdateTime = time.Now()
 
 	return cached.instanceId, nil
 }
 
 func (cached *metaDataCached) PrivateIPv4() (string, error) {
-	if (cached.privateIPv4 != "") &&
-		cached.privateIPv4LastUpdateTime.Add(time.Duration(cached.expireTimeSecond)*time.Second).After(time.Now()) {
+	if cached.privateIPv4 != "" {
 		return cached.privateIPv4, nil
 	}
 
@@ -137,7 +131,6 @@ func (cached *metaDataCached) PrivateIPv4() (string, error) {
 	}
 
 	cached.privateIPv4 = rsp
-	cached.privateIPv4LastUpdateTime = time.Now()
 
 	return cached.privateIPv4, nil
 }
@@ -151,7 +144,7 @@ func (cached *metaDataCached) PublicIPv4() (string, error) {
 	}
 
 	cached.publicIPv4LastUpdateTime = time.Now()
-	
+
 	rsp, err := cached.metaData.PublicIPv4()
 	if err != nil {
 		glog.Errorf("metaDataCached PublicIPv4() get err :%s", err.Error())
@@ -164,6 +157,6 @@ func (cached *metaDataCached) PublicIPv4() (string, error) {
 	}
 
 	cached.publicIPv4 = &rsp
-	
+
 	return *cached.publicIPv4, nil
 }
