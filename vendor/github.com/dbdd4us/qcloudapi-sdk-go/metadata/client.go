@@ -164,9 +164,9 @@ func (m *MetaDataClient) send(resource string) (string, error) {
 }
 
 var retry = AttemptStrategy{
-	Min:   1,
-	Total: 5 * time.Second,
-	Delay: 1 * time.Second,
+	Min:   0,
+	Total: 3 * time.Second,
+	Delay: 200 * time.Millisecond,
 }
 
 func (vpc *MetaDataClient) Go(resource string) (resu string, err error) {
