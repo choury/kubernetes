@@ -23,8 +23,6 @@ import (
 	"path/filepath"
 	"strconv"
 
-	libcontainercgroups "github.com/opencontainers/runc/libcontainer/cgroups"
-
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubernetes/pkg/api/v1/resource"
@@ -181,7 +179,7 @@ func ResourceConfigForPod(pod *v1.Pod, enforceCPULimits bool) *ResourceConfig {
 // GetCgroupSubsystems returns information about the mounted cgroup subsystems
 func GetCgroupSubsystems() (*CgroupSubsystems, error) {
 	// get all cgroup mounts.
-	allCgroups, err := libcontainercgroups.GetCgroupMounts(true)
+	allCgroups, err := GetCgroupMounts(true)
 	if err != nil {
 		return &CgroupSubsystems{}, err
 	}
