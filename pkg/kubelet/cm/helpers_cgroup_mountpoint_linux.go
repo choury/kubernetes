@@ -121,7 +121,10 @@ func getCgroupMountsHelper(ss map[string]bool, mi io.Reader, all bool) ([]libcon
 				opt = opt[len(cgroupNamePrefix):]
 			}
 			m.Subsystems = append(m.Subsystems, opt)
-			numFound++
+			
+			if !all {
+				numFound++
+			}
 		}
 		// Skip lxcfs mountpoint
 		if !strings.HasPrefix(m.Mountpoint, lxcfsCgroupPathPrefix) && len(m.Subsystems) > 0 {
