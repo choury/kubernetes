@@ -17,11 +17,13 @@ limitations under the License.
 package qcloud
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"strconv"
 	"time"
-	
+	"io"
+
 	"github.com/dbdd4us/qcloudapi-sdk-go/metadata"
 	glog "k8s.io/klog"
 )
@@ -31,6 +33,7 @@ const (
 	DEFAULT_EXPIRE_TIME_SECOND = 15 * 60
 	TIMEOUT_SECOND_NAME    = "TimeoutSecond"
 	DEFAULT_TIMEOUT_SECOND_NAME = 5
+	LOCAL_CACHE_PATH = "/etc/kubernetes"
 )
 
 //避免对metadata服务的强依赖
@@ -98,34 +101,76 @@ func (cached *metaDataCached) InstanceID() (string, error) {
 	if cached.instanceId != "" {
 		return cached.instanceId, nil
 	}
+
+	var errReturn error
+	
 	rsp, err := cached.metaData.InstanceID()
 	if err != nil {
-		return "", err
+		errReturn = err
+	} else {
+		if rsp == "" {
+			errReturn = fmt.Errorf("InstanceID cannot be empty")
+		}
 	}
 
-	if rsp == "" {
-		return "",fmt.Errorf("InstanceID cannot be empty")
-	}
+	if errReturn == nil {
+		cached.instanceId = rsp
+		err := cached.SetLocalCache(metadata.INSTANCE_ID,cached.instanceId)
+		if err != nil {
+			glog.Warningf("SetLocalCache %s failed ,err:%s",metadata.INSTANCE_ID,err.Error())
+		}
+		return cached.instanceId, nil
+	}else{
+		glog.Errorf("InstanceID get failed ,errReturn %s",errReturn.Error())
+		value,err := cached.GetLocalCache(metadata.INSTANCE_ID)
+		if err != nil {
+			return "",fmt.Errorf("InstanceID get failed ,errReturn %s,GetLocalCache err %s",errReturn.Error(),err.Error())
+		}
 
-	cached.instanceId = rsp
-	return cached.instanceId, nil
+		if value == ""{
+			return "",fmt.Errorf("InstanceID get failed ,errReturn %s,GetLocalCache empty",errReturn.Error())
+		}
+		cached.instanceId = value
+		return cached.instanceId,nil
+	}
 }
 
 func (cached *metaDataCached) PrivateIPv4() (string, error) {
 	if cached.privateIPv4 != "" {
 		return cached.privateIPv4, nil
 	}
+
+	var errReturn error
+
 	rsp, err := cached.metaData.PrivateIPv4()
 	if err != nil {
-		return "", err
+		errReturn = err
+	}else{
+		if rsp == "" {
+			errReturn = fmt.Errorf("PrivateIPv4 cannot be empty")
+		}
 	}
 
-	if rsp == "" {
-		return "",fmt.Errorf("PrivateIPv4 cannot be empty")
-	}
+	if errReturn == nil {
+		cached.privateIPv4 = rsp
+		err := cached.SetLocalCache(metadata.PRIVATE_IPV4,cached.privateIPv4)
+		if err != nil {
+			glog.Warningf("SetLocalCache %s failed ,err:%s",metadata.PRIVATE_IPV4,err.Error())
+		}
+		return cached.privateIPv4, nil
+	}else{
+		glog.Errorf("PrivateIPv4 get failed ,errReturn %s",errReturn.Error())
+		value,err := cached.GetLocalCache(metadata.PRIVATE_IPV4)
+		if err != nil {
+			return "",fmt.Errorf("PrivateIPv4 get failed ,errReturn %s,GetLocalCache err %s",errReturn.Error(),err.Error())
+		}
 
-	cached.privateIPv4 = rsp
-	return cached.privateIPv4, nil
+		if value == ""{
+			return "",fmt.Errorf("PrivateIPv4 get failed ,errReturn %s,GetLocalCache empty",errReturn.Error())
+		}
+		cached.privateIPv4 = value
+		return cached.privateIPv4,nil
+	}
 }
 
 //反回 "" 时，公网IP不存在
@@ -142,7 +187,8 @@ func (cached *metaDataCached) PublicIPv4() (string, error) {
 	if err != nil {
 		glog.Errorf("metaDataCached PublicIPv4() get err :%s", err.Error())
 		if cached.publicIPv4 == nil {
-			return "", err
+			glog.Warningf("metaDataCached PublicIPv4(), use empty")
+			return "", nil  //use empty to instead err,next time to update it
 		} else {
 			glog.Warningf("metaDataCached PublicIPv4(), use cached: %s", *(cached.publicIPv4))
 			return *(cached.publicIPv4), nil
@@ -152,4 +198,62 @@ func (cached *metaDataCached) PublicIPv4() (string, error) {
 	cached.publicIPv4 = &rsp
 	
 	return *cached.publicIPv4, nil
+}
+
+func (cached *metaDataCached) SetLocalCache(resource string,value string) error {
+
+	if resource == "" {
+		return fmt.Errorf("SetLocalCache resource cannot be empty")
+	}
+
+	path := fmt.Sprintf("%s/%s",LOCAL_CACHE_PATH,resource)
+
+	glog.Infof("SetLocalCache path %s",path)
+
+	fout, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+
+	defer fout.Close()
+
+	count,err := fout.WriteString(value)
+	if err != nil {
+		return err
+	}
+
+	glog.Infof("SetLocalCache count %d",count)
+	
+	return nil
+}
+
+func (cached *metaDataCached) GetLocalCache(resource string) (string,error) {
+
+	if resource == "" {
+		return "",fmt.Errorf("GetLocalCache resource cannot be empty")
+	}
+
+	path := fmt.Sprintf("%s/%s",LOCAL_CACHE_PATH,resource)
+
+	glog.Infof("GetLocalCache path %s",path)
+
+	fin, err := os.Open(path)
+	if err != nil {
+		return "",err
+	}
+	defer fin.Close()
+
+	buf := bufio.NewReader(fin)
+	line, err := buf.ReadString('\n')
+	if err != nil {
+		if err == io.EOF {
+			glog.Infof("GetLocalCache read EOF succeed,line(%s)",line)
+			return line,nil
+		} else {
+			return "",err
+		}
+	}
+
+	glog.Infof("GetLocalCache read succeed,line(%s)",line)
+	return line,nil
 }
