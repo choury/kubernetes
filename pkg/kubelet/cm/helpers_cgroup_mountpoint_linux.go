@@ -121,7 +121,7 @@ func getCgroupMountsHelper(ss map[string]bool, mi io.Reader, all bool) ([]libcon
 				opt = opt[len(cgroupNamePrefix):]
 			}
 			m.Subsystems = append(m.Subsystems, opt)
-			
+
 			if !all {
 				numFound++
 			}
