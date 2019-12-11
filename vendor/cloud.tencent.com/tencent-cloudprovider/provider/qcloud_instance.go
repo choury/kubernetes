@@ -19,18 +19,36 @@ package qcloud
 import (
 	"errors"
 	"github.com/dbdd4us/qcloudapi-sdk-go/cvm"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/api/core/v1"
+	glog "k8s.io/klog"
+
 	cloudprovider "k8s.io/cloud-provider"
 
+	"k8s.io/apimachinery/pkg/types"
+
+	"context"
 	"fmt"
 	"net/url"
 	"strings"
-	"context"
 )
 
+func (self *QCloud) getInstanceInfoByNodeName(nodeName string) (*cvm.InstanceInfo, error) {
+	if self.Config.NodeNameType != HostNameType {
+		return self.getInstanceInfoByLanIp(nodeName)
+	} else {
+		instanceId, err := self.getInstanceIdByNodeName(nodeName)
+		if err != nil {
+			glog.Errorf("getInstanceIdByNodeName failed %s", err.Error())
+			return nil, err
+		}
+		return self.getInstanceInfoById(instanceId)
+	}
+
+	return nil, QcloudInstanceNotFound
+}
+
 //TODO 隔离，已退还，退还中
-func (self *QCloud) getInstanceInfoByNodeName(lanIP string) (*cvm.InstanceInfo, error) {
+func (self *QCloud) getInstanceInfoByLanIp(lanIP string) (*cvm.InstanceInfo, error) {
 	filter := cvm.NewFilter(cvm.FilterNamePrivateIpAddress, lanIP)
 
 	args := cvm.DescribeInstancesArgs{
@@ -85,11 +103,15 @@ func (name kubernetesInstanceID) mapToInstanceID() (string, error) {
 		// Build a URL with an empty host (AZ)
 		s = "qcloud://" + "/" + "/" + s
 	}
+
 	u, err := url.Parse(s)
 	if err != nil {
+		glog.Errorf("Invalid instance name (%s): %v", name, err)
 		return "", fmt.Errorf("Invalid instance name (%s): %v", name, err)
 	}
+
 	if u.Scheme != "qcloud" {
+		glog.Errorf("Invalid scheme for Qcloud instance (%s)", name)
 		return "", fmt.Errorf("Invalid scheme for Qcloud instance (%s)", name)
 	}
 
@@ -103,7 +125,8 @@ func (name kubernetesInstanceID) mapToInstanceID() (string, error) {
 		instanceId = tokens[1]
 	}
 
-	if instanceId == "" || strings.Contains(instanceId, "/") || !strings.HasPrefix(instanceId, "i-") {
+	if instanceId == "" || strings.Contains(instanceId, "/") || !strings.HasPrefix(instanceId, "ins-") {
+		glog.Errorf("Invalid format for Qcloud instance (%s)", name)
 		return "", fmt.Errorf("Invalid format for Qcloud instance (%s)", name)
 	}
 
@@ -113,104 +136,91 @@ func (name kubernetesInstanceID) mapToInstanceID() (string, error) {
 //TODO 如果NodeAddressesByProviderID失败，nodeController会调用此接口
 func (self *QCloud) NodeAddresses(ctx context.Context, name types.NodeName) ([]v1.NodeAddress, error) {
 
+	glog.V(3).Infof("QCloud Plugin NodeAddresses NodeName %s", name)
+
 	addresses := make([]v1.NodeAddress, 0)
 
-	ip, err := self.metaData.PrivateIPv4()
-	if err == nil && ip == string(name) {
-		addresses = append(addresses, v1.NodeAddress{
-			Type: v1.NodeInternalIP, Address: ip,
-		})
-
-		publicIp, err := self.metaData.PublicIPv4()
-		if err == nil && len(publicIp) > 0 {
-			addresses = append(addresses, v1.NodeAddress{
-				Type: v1.NodeExternalIP, Address: publicIp,
-			})
-		}
-
-		return addresses, nil
-	}
-
-	info, err := self.getInstanceInfoByNodeName(string(name))
+	privateIp, err := self.metaData.PrivateIPv4()
 	if err != nil {
 		return nil, err
 	}
+
+	glog.V(3).Infof("QCloud Plugin NodeAddresses privateIp %s", privateIp)
+
 	addresses = append(addresses, v1.NodeAddress{
-		Type: v1.NodeInternalIP, Address: info.PrivateIPAddresses[0],
+		Type: v1.NodeInternalIP, Address: privateIp,
 	})
 
-	for _, publicIp := range info.PublicIPAddresses {
+	publicIp, err := self.metaData.PublicIPv4()
+	if err == nil && (publicIp != "") {
+		glog.V(3).Infof("QCloud Plugin NodeAddresses publicIp %s", publicIp)
 		addresses = append(addresses, v1.NodeAddress{
 			Type: v1.NodeExternalIP, Address: publicIp,
 		})
 	}
 
 	return addresses, nil
-
-}
-
-//返回instanceID or cloudprovider.InstanceNotFound
-func (self *QCloud) ExternalID(ctx context.Context, name types.NodeName) (string, error) {
-	ip, err := self.metaData.PrivateIPv4()
-	if err == nil && ip == string(name) {
-		instanceId, err := self.metaData.InstanceID()
-		if err != nil {
-			return "", err
-		}
-		return instanceId, nil
-	}
-
-	info, err := self.getInstanceInfoByNodeName(string(name))
-	if err != nil {
-		return "", err
-	}
-	return info.InstanceID, nil
-
 }
 
 // /zone/instanceId
 //只在kubelet中调用
 func (self *QCloud) InstanceID(ctx context.Context, name types.NodeName) (string, error) {
-	ip, err := self.metaData.PrivateIPv4()
-	if err == nil && ip == string(name) {
-		instanceId, err := self.metaData.InstanceID()
-		if err != nil {
-			return "", err
-		}
-		zone, err := self.GetZone(ctx)
-		if err != nil {
-			return "", err
-		}
-		return "/" + zone.FailureDomain + "/" + instanceId, nil
-	}
-	info, err := self.getInstanceInfoByNodeName(string(name))
+
+	glog.V(3).Infof("QCloud Plugin InstanceID NodeName %s", name)
+
+	instanceId, err := self.metaData.InstanceID()
 	if err != nil {
 		return "", err
 	}
-	return "/" + info.Placement.Zone + "/" + info.InstanceID, nil
 
+	glog.V(3).Infof("QCloud Plugin InstanceID instanceId %s", instanceId)
+
+	zone, err := self.GetZone(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	return "/" + zone.FailureDomain + "/" + instanceId, nil
 }
 
 //只在Master中调用
 func (self *QCloud) NodeAddressesByProviderID(ctx context.Context, providerID string) ([]v1.NodeAddress, error) {
+
+	glog.Infof("QCloud Plugin NodeAddressesByProviderID  %s", providerID)
+
 	instanceId, err := kubernetesInstanceID(providerID).mapToInstanceID()
 	if err != nil {
 		return nil, err
 	}
-	info, err := self.getInstanceInfoById(instanceId)
+
+	info, err := self.getInstanceInfoByInstanceIdSingleV3(instanceId)
 	if err != nil {
 		return nil, err
 	}
+
+	var privateIpAddresses string
+	if (len(info.PrivateIpAddresses) > 0) && (info.PrivateIpAddresses[0] != nil) {
+		privateIpAddresses = *(info.PrivateIpAddresses[0])
+	}
+
 	addresses := make([]v1.NodeAddress, 0)
 	addresses = append(addresses, v1.NodeAddress{
-		Type: v1.NodeInternalIP, Address: info.PrivateIPAddresses[0],
+		Type: v1.NodeInternalIP, Address: privateIpAddresses,
 	})
 
-	for _, publicIp := range info.PublicIPAddresses {
+	for _, publicIpPtr := range info.PublicIpAddresses {
+
+		var publicIp string
+		if publicIpPtr != nil {
+			publicIp = *publicIpPtr
+		}
+
 		addresses = append(addresses, v1.NodeAddress{
 			Type: v1.NodeExternalIP, Address: publicIp,
 		})
 	}
+
+	glog.Infof("QCloud Plugin NodeAddressesByProviderID addresses %v", addresses)
 
 	return addresses, nil
 }
@@ -230,12 +240,9 @@ func (self *QCloud) AddSSHKeyToAllInstances(ctx context.Context, user string, ke
 //只会在kubelet中调用
 func (self *QCloud) CurrentNodeName(ctx context.Context, hostName string) (types.NodeName, error) {
 
-	ip, err := self.metaData.PrivateIPv4()
-	if err != nil {
-		return types.NodeName(""), err
-	}
-	return types.NodeName(ip), nil
+	glog.Infof("QCloud Plugin CurrentNodeName hostName %s", hostName)
 
+	return types.NodeName(hostName), nil
 }
 
 func (self *QCloud) InstanceExistsByProviderID(ctx context.Context, providerID string) (bool, error) {
@@ -253,6 +260,6 @@ func (self *QCloud) GetZoneByNodeName(ctx context.Context, nodeName types.NodeNa
 	return cloudprovider.Zone{Region: self.Config.Region, FailureDomain: self.Config.Zone}, nil
 }
 
-func (self * QCloud) InstanceShutdownByProviderID(ctx context.Context, providerID string) (bool, error){
+func (self *QCloud) InstanceShutdownByProviderID(ctx context.Context, providerID string) (bool, error) {
 	return true, nil
 }
