@@ -22,9 +22,6 @@ import (
 	"k8s.io/api/core/v1"
 	runtimeapi "k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2"
 	"k8s.io/kubernetes/pkg/kubelet/qos"
-	kubefeatures "k8s.io/kubernetes/pkg/features"
-	v1qos "k8s.io/kubernetes/pkg/apis/core/v1/helper/qos"
-	utilfeature "k8s.io/apiserver/pkg/util/feature"
 )
 
 // applyPlatformSpecificContainerConfig applies platform specific configurations to runtimeapi.ContainerConfig.
@@ -69,11 +66,6 @@ func (m *kubeGenericRuntimeManager) generateLinuxContainerConfig(container *v1.C
 		// if cpuLimit.Amount is nil, then the appropriate default value is returned
 		// to allow full usage of cpu resource.
 		cpuQuota, cpuPeriod := milliCPUToQuota(cpuLimit.MilliValue())
-		// if the pods are in Guaranteed QoS class and cpu manager is enabled, we should
-		// disable the use of of cfs quota.
-		if v1qos.GetPodQOS(pod) == v1.PodQOSGuaranteed && utilfeature.DefaultFeatureGate.Enabled(kubefeatures.CPUManager) {
-			cpuQuota = -1
-		}
 		lc.Resources.CpuQuota = cpuQuota
 		lc.Resources.CpuPeriod = cpuPeriod
 	}

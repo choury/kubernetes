@@ -111,7 +111,6 @@ go_library(
         "//vendor/k8s.io/client-go/util/flowcontrol:go_default_library",
     ] + select({
         "@io_bazel_rules_go//go/platform:linux": [
-            "//pkg/apis/core/v1/helper/qos:go_default_library",
             "//pkg/kubelet/qos:go_default_library",
         ],
         "@io_bazel_rules_go//go/platform:windows": [
