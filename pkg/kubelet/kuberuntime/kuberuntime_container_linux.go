@@ -25,7 +25,6 @@ import (
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	kubefeatures "k8s.io/kubernetes/pkg/features"
 	runtimeapi "k8s.io/kubernetes/pkg/kubelet/apis/cri/runtime/v1alpha2"
-	v1qos "k8s.io/kubernetes/pkg/apis/core/v1/helper/qos"
 	"k8s.io/kubernetes/pkg/kubelet/qos"
 )
 
@@ -75,11 +74,6 @@ func (m *kubeGenericRuntimeManager) generateLinuxContainerConfig(container *v1.C
 			cpuPeriod = int64(m.cpuCFSQuotaPeriod.Duration / time.Microsecond)
 		}
 		cpuQuota := milliCPUToQuota(cpuLimit.MilliValue(), cpuPeriod)
-		// if the pods are in Guaranteed QoS class and cpu manager is enabled, we should
-		// disable the use of of cfs quota.
-		if v1qos.GetPodQOS(pod) == v1.PodQOSGuaranteed && utilfeature.DefaultFeatureGate.Enabled(kubefeatures.CPUManager) {
-			cpuQuota = -1
-		}
 		lc.Resources.CpuQuota = cpuQuota
 		lc.Resources.CpuPeriod = cpuPeriod
 	}
