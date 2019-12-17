@@ -280,7 +280,7 @@ func installMetricHandler(pathRecorderMux *mux.PathRecorderMux, sched *scheduler
 		})
 
 		// get all node resource infos from scheduler cache
-		pathRecorderMux.HandleFunc("/debug/node/resource", func(w http.ResponseWriter, req *http.Request) {
+		pathRecorderMux.HandleFunc("/debug/nodes/resource", func(w http.ResponseWriter, req *http.Request) {
 			resourceInfos := sched.Cache().GetCachedResourceInfos()
 			if resourceInfos == nil{
 				msg := "Get scheduler cache node resource infos nil"
@@ -352,7 +352,7 @@ func installMetricHandler(pathRecorderMux *mux.PathRecorderMux, sched *scheduler
 		})
 
 		// get all node resource infos from kube-api
-		pathRecorderMux.HandleFunc("/debug/api/node/resource", func(w http.ResponseWriter, req *http.Request) {
+		pathRecorderMux.HandleFunc("/debug/api/nodes/resource", func(w http.ResponseWriter, req *http.Request) {
 			nodeResourceInfos, err := sched.GetNodeResourceInfos(inClient)
 			if err != nil{
 				msg := fmt.Sprintf("Get node list form kube-apiserver err : %+v", err)
