@@ -252,6 +252,7 @@ func installMetricHandler(pathRecorderMux *mux.PathRecorderMux, sched *scheduler
 	})
 
 	if sched != nil {
+		// get node infos from scheduler cache by hostname
 		pathRecorderMux.HandleFunc("/debug/node/cached", func(w http.ResponseWriter, req *http.Request) {
 			hostname := req.URL.Query().Get("hostname")
 			if hostname == ""{
@@ -278,6 +279,7 @@ func installMetricHandler(pathRecorderMux *mux.PathRecorderMux, sched *scheduler
 			w.Write(nodeInfo)
 		})
 
+		// get all node resource infos from scheduler cache
 		pathRecorderMux.HandleFunc("/debug/node/resource", func(w http.ResponseWriter, req *http.Request) {
 			resourceInfos := sched.Cache().GetCachedResourceInfos()
 			if resourceInfos == nil{
@@ -297,6 +299,59 @@ func installMetricHandler(pathRecorderMux *mux.PathRecorderMux, sched *scheduler
 			w.Write(nodeInfo)
 		})
 
+		// get node infos from kube-api by hostname
+		pathRecorderMux.HandleFunc("/debug/api/node/infos", func(w http.ResponseWriter, req *http.Request) {
+			hostname := req.URL.Query().Get("hostname")
+			if hostname == "" {
+				w.Write([]byte("hostname input nil"))
+				return
+			}
+
+			node, err := inClient.CoreV1().Nodes().Get(hostname, metav1.GetOptions{})
+			if err != nil {
+				msg := fmt.Sprintf("Marshal nodes resource infos err : %+v", err)
+				glog.Errorf(msg)
+				w.Write([]byte(msg))
+				return
+			}
+
+			nodesInfo, err := json.Marshal(node)
+			if err !=  nil{
+				msg := fmt.Sprintf("Marshal node infos form kube-apiserver err : %+v", err)
+				glog.Errorf(msg)
+				w.Write([]byte(msg))
+				return
+			}
+			w.Write(nodesInfo)
+		})
+
+		// get node resource infos from kube-api by hostname
+		pathRecorderMux.HandleFunc("/debug/api/node/resource", func(w http.ResponseWriter, req *http.Request) {
+			hostname := req.URL.Query().Get("hostname")
+			if hostname == "" {
+				w.Write([]byte("hostname input nil"))
+				return
+			}
+
+			nodeResource, err := sched.DescribeResource("", hostname, inClient)
+			if err != nil{
+				msg := fmt.Sprintf("Get node list form kube-apiserver err : %+v", err)
+				glog.V(1).Infof(msg)
+				w.Write([]byte(msg))
+				return
+			}
+
+			nodesInfo, err := json.Marshal(nodeResource)
+			if err !=  nil{
+				msg := fmt.Sprintf("Marshal node list form kube-apiserver err : %+v", err)
+				glog.Errorf(msg)
+				w.Write([]byte(msg))
+				return
+			}
+			w.Write(nodesInfo)
+		})
+
+		// get all node resource infos from kube-api
 		pathRecorderMux.HandleFunc("/debug/api/node/resource", func(w http.ResponseWriter, req *http.Request) {
 			nodeResourceInfos, err := sched.GetNodeResourceInfos(inClient)
 			if err != nil{
