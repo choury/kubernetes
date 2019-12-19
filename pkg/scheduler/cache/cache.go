@@ -183,7 +183,6 @@ func (cache *schedulerCache) GetCachedNodeInfos(hostname string) interface{} {
 				}
 			}
 			nodeInfos[hostNome] = nodeInfoTmp
-
 			return nodeInfos
 		}
 	}
