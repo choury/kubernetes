@@ -157,7 +157,7 @@ func (cache *schedulerCache) GetCachedNodeInfos(hostname string) interface{} {
 	nodeInfos := make(map[string]interface{})
 	for hostNome, nodeInfo := range cache.nodes {
 		if hostNome == hostname {
-			 nodeInfoTmp := &NodeInfo{
+			nodeInfos[hostNome] = &NodeInfo{
 				Node:                    nodeInfo.node,
 				Pods:                    nodeInfo.pods,
 				PodsWithAffinity:        nodeInfo.podsWithAffinity,
@@ -173,16 +173,6 @@ func (cache *schedulerCache) GetCachedNodeInfos(hostname string) interface{} {
 				PidPressureCondition:    nodeInfo.pidPressureCondition,
 				Generation:              nodeInfo.generation,
 			}
-
-			if len(nodeInfo.usedPorts) > 0 {
-				for ip, portMap := range nodeInfo.usedPorts {
-					nodeInfoTmp.UsedPorts[ip] = make(map[util.ProtocolPort]struct{})
-					for protocolPort, v := range portMap {
-						nodeInfoTmp.UsedPorts[ip][protocolPort] = v
-					}
-				}
-			}
-			nodeInfos[hostNome] = nodeInfoTmp
 			return nodeInfos
 		}
 	}

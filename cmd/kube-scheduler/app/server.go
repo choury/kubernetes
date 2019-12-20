@@ -277,6 +277,7 @@ func installMetricHandler(pathRecorderMux *mux.PathRecorderMux, sched *scheduler
 			}
 
 			w.Write(nodeInfo)
+			defaultMetricsHandler(w, req)
 		})
 
 		// get all node resource infos from scheduler cache
@@ -297,6 +298,7 @@ func installMetricHandler(pathRecorderMux *mux.PathRecorderMux, sched *scheduler
 				return
 			}
 			w.Write(nodeInfo)
+			defaultMetricsHandler(w, req)
 		})
 
 		// get node infos from kube-api by hostname
@@ -323,6 +325,7 @@ func installMetricHandler(pathRecorderMux *mux.PathRecorderMux, sched *scheduler
 				return
 			}
 			w.Write(nodesInfo)
+			defaultMetricsHandler(w, req)
 		})
 
 		// get node resource infos from kube-api by hostname
@@ -349,6 +352,7 @@ func installMetricHandler(pathRecorderMux *mux.PathRecorderMux, sched *scheduler
 				return
 			}
 			w.Write(nodesInfo)
+			defaultMetricsHandler(w, req)
 		})
 
 		// get all node resource infos from kube-api
@@ -369,6 +373,7 @@ func installMetricHandler(pathRecorderMux *mux.PathRecorderMux, sched *scheduler
 				return
 			}
 			w.Write(nodesInfos)
+			defaultMetricsHandler(w, req)
 		})
 	}
 }
