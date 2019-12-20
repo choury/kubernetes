@@ -112,52 +112,52 @@ func newSchedulerCache(ttl, period time.Duration, stop <-chan struct{}) *schedul
 	}
 }
 
-func (cache *schedulerCache) GetCachedNodeInfos(hostname string) interface{} {
-	type NodeInfo struct {
-		// Overall node information.
-		Node *v1.Node
+type NodeInfoOut struct {
+	// Overall node information.
+	Node *v1.Node
 
-		Pods             []*v1.Pod
-		PodsWithAffinity []*v1.Pod
-		UsedPorts        util.HostPortInfo
+	Pods             []*v1.Pod
+	PodsWithAffinity []*v1.Pod
+	UsedPorts        util.HostPortInfo
 
-		// Total requested resource of all pods on this node.
-		// It includes assumed pods which scheduler sends binding to apiserver but
-		// didn't get it as scheduled yet.
-		RequestedResource *Resource
-		NonzeroRequest    *Resource
-		// We store allocatedResources (which is Node.Status.Allocatable.*) explicitly
-		// as int64, to avoid conversions and accessing map.
-		AllocatableResource *Resource
+	// Total requested resource of all pods on this node.
+	// It includes assumed pods which scheduler sends binding to apiserver but
+	// didn't get it as scheduled yet.
+	RequestedResource *Resource
+	NonzeroRequest    *Resource
+	// We store allocatedResources (which is Node.Status.Allocatable.*) explicitly
+	// as int64, to avoid conversions and accessing map.
+	AllocatableResource *Resource
 
-		// Cached taints of the node for faster lookup.
-		Taints    []v1.Taint
-		TaintsErr error
+	// Cached taints of the node for faster lookup.
+	Taints    []v1.Taint
+	TaintsErr error
 
-		// imageStates holds the entry of an image if and only if this image is on the node. The entry can be used for
-		// checking an image's existence and advanced usage (e.g., image locality scheduling policy) based on the image
-		// state information.
-		ImageStates map[string]*ImageStateSummary
+	// imageStates holds the entry of an image if and only if this image is on the node. The entry can be used for
+	// checking an image's existence and advanced usage (e.g., image locality scheduling policy) based on the image
+	// state information.
+	ImageStates map[string]*ImageStateSummary
 
-		// TransientInfo holds the information pertaining to a scheduling cycle. This will be destructed at the end of
-		// scheduling cycle.
-		// TODO: @ravig. Remove this once we have a clear approach for message passing across predicates and priorities.
-		TransientInfo *transientSchedulerInfo
+	// TransientInfo holds the information pertaining to a scheduling cycle. This will be destructed at the end of
+	// scheduling cycle.
+	// TODO: @ravig. Remove this once we have a clear approach for message passing across predicates and priorities.
+	TransientInfo *transientSchedulerInfo
 
-		// Cached conditions of node for faster lookup.
-		MemoryPressureCondition v1.ConditionStatus
-		DiskPressureCondition   v1.ConditionStatus
-		PidPressureCondition    v1.ConditionStatus
+	// Cached conditions of node for faster lookup.
+	MemoryPressureCondition v1.ConditionStatus
+	DiskPressureCondition   v1.ConditionStatus
+	PidPressureCondition    v1.ConditionStatus
 
-		// Whenever NodeInfo changes, generation is bumped.
-		// This is used to avoid cloning it if the object didn't change.
-		Generation int64
-	}
+	// Whenever NodeInfo changes, generation is bumped.
+	// This is used to avoid cloning it if the object didn't change.
+	Generation int64
+}
 
-	nodeInfos := make(map[string]interface{})
+func (cache *schedulerCache) GetCachedNodeInfos(hostname string) map[string]NodeInfoOut {
+	nodeInfos := make(map[string]NodeInfoOut)
 	for hostNome, nodeInfo := range cache.nodes {
 		if hostNome == hostname {
-			nodeInfos[hostNome] = &NodeInfo{
+			nodeInfos[hostNome] = NodeInfoOut{
 				Node:                    nodeInfo.node,
 				Pods:                    nodeInfo.pods,
 				PodsWithAffinity:        nodeInfo.podsWithAffinity,
