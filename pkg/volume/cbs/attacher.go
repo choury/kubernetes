@@ -18,9 +18,12 @@ package qcloud_cbs
 
 import (
 	"fmt"
+	"io/ioutil"
 	"k8s.io/apimachinery/pkg/types"
 	"os"
 	"path"
+	"path/filepath"
+	"strings"
 	"time"
 
 	qcloud "cloud.tencent.com/tencent-cloudprovider/provider"
@@ -148,7 +151,7 @@ func (attacher *qcloudCbsAttacher) WaitForAttach(spec *volume.Spec, devicePath s
 		case <-ticker.C:
 			klog.V(5).Infof("Checking cbs disk (%q) is attached", volumeSource.CbsDiskId)
 			// TODO because udev or tlinux bug, we maybe traverse /sys/block/vdx/serial to find disk
-			path, err := verifyDevicePath(devicePath)
+			path, err := verifyDevicePath(devicePath, volumeSource.CbsDiskId)
 			if err != nil {
 				// Log error, if any, and continue checking periodically. See issue #11321
 				klog.Warningf("Error verifying disk (%q) is attached: %v", volumeSource.CbsDiskId, err)
@@ -295,4 +298,43 @@ func (detacher *qcloudCbsDetacher) WaitForDetach(devicePath string, timeout time
 
 func (detacher *qcloudCbsDetacher) UnmountDevice(deviceMountPath string) error {
 	return mount.CleanupMountPoint(deviceMountPath, detacher.mounter, false)
+}
+
+func getDevicePathsBySerial(diskId string) (string, error) {
+	dirs, _ := filepath.Glob("/sys/block/*")
+	for _, dir := range dirs {
+		serialPath := filepath.Join(dir, "serial")
+		serialPathExist, err := pathExist(serialPath)
+		if err != nil {
+			return "", err
+		}
+
+		if serialPathExist {
+			content, err := ioutil.ReadFile(serialPath)
+			if err != nil {
+				klog.Errorf("Failed to get diskId from serial path(%s): %v", serialPath, err)
+				return "", err
+			}
+
+			if string(content) == diskId {
+				arr := strings.Split(dir, "/")
+				return filepath.Join("/dev/", arr[len(arr)-1]), nil
+			}
+		}
+	}
+
+	klog.Errorf("can not find diskId %v by serial", diskId)
+	return "", fmt.Errorf("can not find diskId %v by serial", diskId)
+}
+
+func pathExist(path string) (bool, error) {
+	_, err := os.Stat(path)
+
+	if err == nil {
+		return true, nil
+	} else if os.IsNotExist(err) {
+		return false, nil
+	} else {
+		return false, err
+	}
 }
