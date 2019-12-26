@@ -18,36 +18,45 @@ package qcloud_cbs
 
 import (
 	"errors"
-	"fmt"
+	"os"
 	"time"
 
 	qcloud "cloud.tencent.com/tencent-cloudprovider/provider"
 	"github.com/golang/glog"
 	//"k8s.io/kubernetes/pkg/api/v1"
 	"k8s.io/kubernetes/pkg/cloudprovider"
-	//"k8s.io/kubernetes/pkg/volume"
-	volumeutil "k8s.io/kubernetes/pkg/volume/util"
 )
 
 const (
-	maxRetries = 10
+	maxRetries         = 10
 	checkSleepDuration = time.Second
-	diskByIDPath = "/dev/disk/by-id/"
-	diskQCloudPrefix = "virtio-"
+	diskByIDPath       = "/dev/disk/by-id/"
+	diskQCloudPrefix   = "virtio-"
 )
 
 var ErrProbeVolume = errors.New("Error scanning attached volumes")
 
 type QcloudCbsUtil struct{}
 
-func verifyDevicePath(path string) (string, error) {
-	if pathExists, err := volumeutil.PathExists(path); err != nil {
-		return "", fmt.Errorf("Error checking if path exists: %v", err)
-	} else if pathExists {
-		return path, nil
+func verifyDevicePath(devicePath, diskId string) (string, error) {
+	devicePathExist, err := pathExist(devicePath)
+	if err != nil {
+		return "", err
 	}
 
-	return "", nil
+	if !devicePathExist {
+		devicePathFromSerial, err := getDevicePathsBySerial(diskId)
+		if err != nil {
+			return "", err
+		}
+
+		if err := os.Symlink(devicePathFromSerial, devicePath); err != nil {
+			glog.Errorf("Failed to link devicePathFromSerial(%s) and devicePathFromKubelet(%s): %v", devicePathFromSerial, devicePath, err)
+			return "", err
+		}
+	}
+
+	return devicePath, nil
 }
 
 //// CreateVolume creates a qcloud volume.
