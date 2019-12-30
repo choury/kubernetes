@@ -60,7 +60,7 @@ func (plugin *qcloudDiskPlugin) NewAttacher() (volume.Attacher, error) {
 }
 
 func (plugin *qcloudDiskPlugin) NewDeviceMounter() (volume.DeviceMounter, error) {
-		return plugin.NewAttacher()
+	return plugin.NewAttacher()
 }
 
 func (attacher *qcloudCbsAttacher) Attach(spec *volume.Spec, hostname types.NodeName) (string, error) {
@@ -89,7 +89,7 @@ func (attacher *qcloudCbsAttacher) Attach(spec *volume.Spec, hostname types.Node
 	}
 
 	//TODO
-	return path.Join(diskByIDPath, diskQCloudPrefix + diskId), nil
+	return path.Join(diskByIDPath, diskQCloudPrefix+diskId), nil
 }
 
 func (attacher *qcloudCbsAttacher) VolumesAreAttached(specs []*volume.Spec, nodename types.NodeName) (map[*volume.Spec]bool, error) {
@@ -246,7 +246,7 @@ func (plugin *qcloudDiskPlugin) NewDetacher() (volume.Detacher, error) {
 }
 
 func (plugin *qcloudDiskPlugin) NewDeviceUnmounter() (volume.DeviceUnmounter, error) {
-		return plugin.NewDetacher()
+	return plugin.NewDetacher()
 }
 
 // Detach the given device from the given host.
@@ -314,7 +314,7 @@ func getDevicePathsBySerial(diskId string) (string, error) {
 			return "", err
 		}
 
-		if !serialPathExist {
+		if serialPathExist {
 			content, err := ioutil.ReadFile(serialPath)
 			if err != nil {
 				klog.Errorf("Failed to get diskId from serial path(%s): %v", serialPath, err)
