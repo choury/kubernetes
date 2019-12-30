@@ -297,7 +297,7 @@ func getDevicePathsBySerial(diskId string) (string, error) {
 			return "", err
 		}
 
-		if !serialPathExist {
+		if serialPathExist {
 			content, err := ioutil.ReadFile(serialPath)
 			if err != nil {
 				glog.Errorf("Failed to get diskId from serial path(%s): %v", serialPath, err)
