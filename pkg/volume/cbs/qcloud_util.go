@@ -29,10 +29,10 @@ import (
 )
 
 const (
-	maxRetries = 10
+	maxRetries         = 10
 	checkSleepDuration = time.Second
-	diskByIDPath = "/dev/disk/by-id/"
-	diskQCloudPrefix = "virtio-"
+	diskByIDPath       = "/dev/disk/by-id/"
+	diskQCloudPrefix   = "virtio-"
 )
 
 var ErrProbeVolume = errors.New("Error scanning attached volumes")
