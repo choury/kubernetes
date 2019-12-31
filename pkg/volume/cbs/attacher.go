@@ -28,12 +28,12 @@ import (
 
 	qcloud "cloud.tencent.com/tencent-cloudprovider/provider"
 	"github.com/golang/glog"
+	"k8s.io/api/core/v1"
 	"k8s.io/kubernetes/pkg/util/mount"
 	"k8s.io/kubernetes/pkg/volume"
-	"k8s.io/api/core/v1"
 
-	volumeutil "k8s.io/kubernetes/pkg/volume/util"
 	volumehelper "k8s.io/kubernetes/pkg/volume/util"
+	volumeutil "k8s.io/kubernetes/pkg/volume/util"
 )
 
 type qcloudCbsAttacher struct {
@@ -86,7 +86,7 @@ func (attacher *qcloudCbsAttacher) Attach(spec *volume.Spec, hostname types.Node
 	}
 
 	//TODO
-	return path.Join(diskByIDPath, diskQCloudPrefix + diskId), nil
+	return path.Join(diskByIDPath, diskQCloudPrefix+diskId), nil
 }
 
 func (attacher *qcloudCbsAttacher) VolumesAreAttached(specs []*volume.Spec, nodename types.NodeName) (map[*volume.Spec]bool, error) {
@@ -147,7 +147,7 @@ func (attacher *qcloudCbsAttacher) WaitForAttach(spec *volume.Spec, devicePath s
 		select {
 		case <-ticker.C:
 			glog.V(5).Infof("Checking cbs disk is attached", volumeSource.CbsDiskId)
-		//TODO
+			//TODO
 			path, err := verifyDevicePath(devicePath, volumeSource.CbsDiskId)
 			if err != nil {
 				// Log error, if any, and continue checking periodically. See issue #11321
@@ -305,7 +305,7 @@ func getDevicePathsBySerial(diskId string) (string, error) {
 			return "", err
 		}
 
-		if !serialPathExist {
+		if serialPathExist {
 			content, err := ioutil.ReadFile(serialPath)
 			if err != nil {
 				glog.Errorf("Failed to get diskId from serial path(%s): %v", serialPath, err)
