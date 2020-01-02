@@ -46,6 +46,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/cli/globalflag"
+	"k8s.io/component-base/logs"
 	"k8s.io/component-base/metrics/legacyregistry"
 	"k8s.io/klog"
 	schedulerserverconfig "k8s.io/kubernetes/cmd/kube-scheduler/app/config"
@@ -339,6 +340,7 @@ func newMetricsHandler(config *kubeschedulerconfig.KubeSchedulerConfiguration) h
 func newHealthzHandler(config *kubeschedulerconfig.KubeSchedulerConfiguration, separateMetrics bool, checks ...healthz.HealthChecker) http.Handler {
 	pathRecorderMux := mux.NewPathRecorderMux("kube-scheduler")
 	healthz.InstallHandler(pathRecorderMux, checks...)
+	pathRecorderMux.UnlistedHandle("/debug/flags/v", routes.StringFlagPutHandler(logs.GlogSetter))
 	if !separateMetrics {
 		installMetricHandler(pathRecorderMux)
 	}
