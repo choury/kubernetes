@@ -40,6 +40,7 @@ import (
 	"k8s.io/apiserver/pkg/server/mux"
 	"k8s.io/apiserver/pkg/server/routes"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	"k8s.io/apiserver/pkg/util/logs"
 	"k8s.io/client-go/informers"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	storageinformers "k8s.io/client-go/informers/storage/v1"
@@ -475,7 +476,9 @@ func makeLeaderElectionConfig(config componentconfig.KubeSchedulerLeaderElection
 // are the same.
 func makeHealthzServer(config *componentconfig.KubeSchedulerConfiguration) *http.Server {
 	mux := mux.NewPathRecorderMux("kube-scheduler")
-	healthz.InstallHandler(mux)
+	healthz.InstallHandler(mux)	
+	mux.UnlistedHandle("/debug/flags/v", stringFlagPutHandler(logs.GlogSetter))
+	
 	if config.HealthzBindAddress == config.MetricsBindAddress {
 		configz.InstallHandler(mux)
 		mux.Handle("/metrics", prometheus.Handler())
@@ -490,6 +493,41 @@ func makeHealthzServer(config *componentconfig.KubeSchedulerConfiguration) *http
 		Addr:    config.HealthzBindAddress,
 		Handler: mux,
 	}
+}
+
+// stringFlagSetterFunc is a func used for setting string type flag.
+type stringFlagSetterFunc func(string) (string, error)
+
+// stringFlagPutHandler wraps an http Handler to set string type flag.
+func stringFlagPutHandler(setter stringFlagSetterFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch {
+		case req.Method == "PUT":
+			body, err := ioutil.ReadAll(req.Body)
+			if err != nil {
+				writePlainText(http.StatusBadRequest, "error reading request body: "+err.Error(), w)
+				return
+			}
+			defer req.Body.Close()
+			response, err := setter(string(body))
+			if err != nil {
+				writePlainText(http.StatusBadRequest, err.Error(), w)
+				return
+			}
+			writePlainText(http.StatusOK, response, w)
+			return
+		default:
+			writePlainText(http.StatusNotAcceptable, "unsupported http method", w)
+			return
+		}
+	})
+}
+
+// writePlainText renders a simple string response.
+func writePlainText(statusCode int, text string, w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(statusCode)
+	fmt.Fprintln(w, text)
 }
 
 // makeMetricsServer builds a metrics server from the config.
