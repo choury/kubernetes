@@ -444,9 +444,9 @@ func (sched *Scheduler) scheduleOne() {
 	if pod == nil {
 		return
 	}
-	if pod.DeletionTimestamp != nil {
-		sched.config.Recorder.Eventf(pod, v1.EventTypeWarning, "FailedScheduling", "skip schedule deleting pod: %v/%v", pod.Namespace, pod.Name)
-		klog.V(3).Infof("Skip schedule deleting pod: %v/%v", pod.Namespace, pod.Name)
+	// Compares the assumed pod in the cache with the pod update. If they are
+	// equal (with certain fields excluded), this pod update will be skipped.
+	if sched.skipPodSchedule(pod) {
 		return
 	}
 
@@ -573,4 +573,23 @@ func (sched *Scheduler) scheduleOne() {
 			metrics.PodScheduleSuccesses.Inc()
 		}
 	}()
+}
+
+// skipPodSchedule returns true if we could skip scheduling the pod for specified cases.
+func (sched *Scheduler) skipPodSchedule(pod *v1.Pod) bool {
+	// Case 1: pod is being deleted.
+	if pod.DeletionTimestamp != nil {
+		sched.config.Recorder.Eventf(pod, v1.EventTypeWarning, "FailedScheduling", "skip schedule deleting pod: %v/%v", pod.Namespace, pod.Name)
+		klog.V(3).Infof("Skip schedule deleting pod: %v/%v", pod.Namespace, pod.Name)
+		return true
+	}
+
+	// Case 2: pod has been assumed and pod updates could be skipped.
+	// An assumed pod can be added again to the scheduling queue if it got an update event
+	// during its previous scheduling cycle but before getting assumed.
+	if sched.skipPodUpdate(pod) {
+		return true
+	}
+
+	return false
 }
