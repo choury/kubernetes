@@ -18,19 +18,22 @@ package qcloud_cbs
 
 import (
 	"fmt"
+	"io/ioutil"
 	"k8s.io/apimachinery/pkg/types"
 	"os"
 	"path"
+	"path/filepath"
+	"strings"
 	"time"
 
 	qcloud "cloud.tencent.com/tencent-cloudprovider/provider"
 	"github.com/golang/glog"
+	"k8s.io/api/core/v1"
 	"k8s.io/kubernetes/pkg/util/mount"
 	"k8s.io/kubernetes/pkg/volume"
-	"k8s.io/api/core/v1"
 
-	volumeutil "k8s.io/kubernetes/pkg/volume/util"
 	volumehelper "k8s.io/kubernetes/pkg/volume/util"
+	volumeutil "k8s.io/kubernetes/pkg/volume/util"
 )
 
 type qcloudCbsAttacher struct {
@@ -83,7 +86,7 @@ func (attacher *qcloudCbsAttacher) Attach(spec *volume.Spec, hostname types.Node
 	}
 
 	//TODO
-	return path.Join(diskByIDPath, diskQCloudPrefix + diskId), nil
+	return path.Join(diskByIDPath, diskQCloudPrefix+diskId), nil
 }
 
 func (attacher *qcloudCbsAttacher) VolumesAreAttached(specs []*volume.Spec, nodename types.NodeName) (map[*volume.Spec]bool, error) {
@@ -144,8 +147,8 @@ func (attacher *qcloudCbsAttacher) WaitForAttach(spec *volume.Spec, devicePath s
 		select {
 		case <-ticker.C:
 			glog.V(5).Infof("Checking cbs disk is attached", volumeSource.CbsDiskId)
-		//TODO
-			path, err := verifyDevicePath(devicePath)
+			//TODO
+			path, err := verifyDevicePath(devicePath, volumeSource.CbsDiskId)
 			if err != nil {
 				// Log error, if any, and continue checking periodically. See issue #11321
 				glog.Warningf("Error verifying disk (%q) is attached: %v", volumeSource.CbsDiskId, err)
@@ -293,4 +296,41 @@ func (detacher *qcloudCbsDetacher) UnmountDevice(deviceMountPath string) error {
 	return volumeutil.UnmountPath(deviceMountPath, detacher.mounter)
 }
 
+func getDevicePathsBySerial(diskId string) (string, error) {
+	dirs, _ := filepath.Glob("/sys/block/*")
+	for _, dir := range dirs {
+		serialPath := filepath.Join(dir, "serial")
+		serialPathExist, err := pathExist(serialPath)
+		if err != nil {
+			return "", err
+		}
 
+		if serialPathExist {
+			content, err := ioutil.ReadFile(serialPath)
+			if err != nil {
+				glog.Errorf("Failed to get diskId from serial path(%s): %v", serialPath, err)
+				return "", err
+			}
+
+			if string(content) == diskId {
+				arr := strings.Split(dir, "/")
+				return filepath.Join("/dev/", arr[len(arr)-1]), nil
+			}
+		}
+	}
+
+	glog.Errorf("can not find diskId %v by serial", diskId)
+	return "", fmt.Errorf("can not find diskId %v by serial", diskId)
+}
+
+func pathExist(path string) (bool, error) {
+	_, err := os.Stat(path)
+
+	if err == nil {
+		return true, nil
+	} else if os.IsNotExist(err) {
+		return false, nil
+	} else {
+		return false, err
+	}
+}

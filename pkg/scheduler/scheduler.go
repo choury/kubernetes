@@ -17,12 +17,15 @@ limitations under the License.
 package scheduler
 
 import (
+	"fmt"
+	"reflect"
 	"time"
 
 	"k8s.io/api/core/v1"
 	resourceapi "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
@@ -405,9 +408,7 @@ func (sched *Scheduler) bind(assumed *v1.Pod, b *v1.Binding) error {
 // scheduleOne does the entire scheduling workflow for a single pod.  It is serialized on the scheduling algorithm's host fitting.
 func (sched *Scheduler) scheduleOne() {
 	pod := sched.config.NextPod()
-	if pod.DeletionTimestamp != nil {
-		sched.config.Recorder.Eventf(pod, v1.EventTypeWarning, "FailedScheduling", "skip schedule deleting pod: %v/%v", pod.Namespace, pod.Name)
-		glog.V(3).Infof("Skip schedule deleting pod: %v/%v", pod.Namespace, pod.Name)
+	if sched.skipPodSchedule(pod) {
 		return
 	}
 
@@ -546,8 +547,8 @@ func (sched *Scheduler) DescribeResource(namespace, name string, inClient client
 func getPodsTotalRequestsAndLimits(podList *v1.PodList) (reqs map[v1.ResourceName]resourceapi.Quantity,
 	limits map[v1.ResourceName]resourceapi.Quantity, err error) {
 
-	reqs = make(map[v1.ResourceName] resourceapi.Quantity)
-	limits = make(map[v1.ResourceName] resourceapi.Quantity)
+	reqs = make(map[v1.ResourceName]resourceapi.Quantity)
+	limits = make(map[v1.ResourceName]resourceapi.Quantity)
 
 	for _, pod := range podList.Items {
 		podReqs, podLimits := resourcev1.PodRequestsAndLimits(&pod)
@@ -570,4 +571,64 @@ func getPodsTotalRequestsAndLimits(podList *v1.PodList) (reqs map[v1.ResourceNam
 		}
 	}
 	return
+}
+
+// skipPodSchedule returns true if we could skip scheduling the pod for specified cases.
+func (sched *Scheduler) skipPodSchedule(pod *v1.Pod) bool {
+	// Case 1: pod is being deleted.
+	if pod.DeletionTimestamp != nil {
+		sched.config.Recorder.Eventf(pod, v1.EventTypeWarning, "FailedScheduling", "skip schedule deleting pod: %v/%v", pod.Namespace, pod.Name)
+		glog.V(3).Infof("Skip schedule deleting pod: %v/%v", pod.Namespace, pod.Name)
+		return true
+	}
+
+	// Case 2: pod has been assumed and pod updates could be skipped.
+	// An assumed pod can be added again to the scheduling queue if it got an update event
+	// during its previous scheduling cycle but before getting assumed.
+	if skipPodUpdate(pod, sched.Cache()) {
+		return true
+	}
+	return false
+}
+
+func skipPodUpdate(pod *v1.Pod, schedulerCache schedulercache.Cache) bool {
+	// Non-assumed pods should never be skipped.
+	isAssumed, err := schedulerCache.IsAssumedPod(pod)
+	if err != nil {
+		runtime.HandleError(fmt.Errorf("failed to check whether pod %s/%s is assumed: %v", pod.Namespace, pod.Name, err))
+		return false
+	}
+	if !isAssumed {
+		return false
+	}
+
+	// Gets the assumed pod from the cache.
+	assumedPod, err := schedulerCache.GetPod(pod)
+	if err != nil {
+		runtime.HandleError(fmt.Errorf("failed to get assumed pod %s/%s from cache: %v", pod.Namespace, pod.Name, err))
+		return false
+	}
+
+	// Compares the assumed pod in the cache with the pod update. If they are
+	// equal (with certain fields excluded), this pod update will be skipped.
+	f := func(pod *v1.Pod) *v1.Pod {
+		p := pod.DeepCopy()
+		// ResourceVersion must be excluded because each object update will
+		// have a new resource version.
+		p.ResourceVersion = ""
+		// Spec.NodeName must be excluded because the pod assumed in the cache
+		// is expected to have a node assigned while the pod update may nor may
+		// not have this field set.
+		p.Spec.NodeName = ""
+		// Annotations must be excluded for the reasons described in
+		// https://github.com/kubernetes/kubernetes/issues/52914.
+		p.Annotations = nil
+		return p
+	}
+	assumedPodCopy, podCopy := f(assumedPod), f(pod)
+	if !reflect.DeepEqual(assumedPodCopy, podCopy) {
+		return false
+	}
+	glog.V(3).Infof("Skipping pod %s/%s update", pod.Namespace, pod.Name)
+	return true
 }
