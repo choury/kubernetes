@@ -71,7 +71,6 @@ go_library(
         "//vendor/google.golang.org/grpc:go_default_library",
     ] + select({
         "@io_bazel_rules_go//go/platform:linux": [
-        "//pkg/apis/core/v1/helper/qos:go_default_library",
             "//pkg/kubelet/qos:go_default_library",
         ],
         "@io_bazel_rules_go//go/platform:windows": [
