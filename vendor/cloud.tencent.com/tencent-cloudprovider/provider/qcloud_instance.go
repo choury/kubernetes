@@ -134,7 +134,7 @@ func (name kubernetesInstanceID) mapToInstanceID() (string, error) {
 //TODO 如果NodeAddressesByProviderID失败，nodeController会调用此接口
 func (self *QCloud) NodeAddresses(ctx context.Context, name types.NodeName) ([]v1.NodeAddress, error) {
 
-	glog.Infof("QCloud Plugin NodeAddresses NodeName %s", name)
+	glog.V(3).Infof("QCloud Plugin NodeAddresses NodeName %s", name)
 
 	addresses := make([]v1.NodeAddress, 0)
 
@@ -143,12 +143,15 @@ func (self *QCloud) NodeAddresses(ctx context.Context, name types.NodeName) ([]v
 		return nil, err
 	}
 
+	glog.V(3).Infof("QCloud Plugin NodeAddresses privateIp %s", privateIp)
+
 	addresses = append(addresses, v1.NodeAddress{
 		Type: v1.NodeInternalIP, Address: privateIp,
 	})
 
 	publicIp, err := self.metaData.PublicIPv4()
-	if err == nil && len(publicIp) > 0 {
+	if err == nil && (publicIp != "") {
+		glog.V(3).Infof("QCloud Plugin NodeAddresses publicIp %s", publicIp)
 		addresses = append(addresses, v1.NodeAddress{
 			Type: v1.NodeExternalIP, Address: publicIp,
 		})
@@ -162,12 +165,14 @@ func (self *QCloud) NodeAddresses(ctx context.Context, name types.NodeName) ([]v
 //只在kubelet中调用
 func (self *QCloud) InstanceID(ctx context.Context, name types.NodeName) (string, error) {
 
-	glog.Infof("QCloud Plugin InstanceID NodeName %s", name)
+	glog.V(3).Infof("QCloud Plugin InstanceID NodeName %s", name)
 
 	instanceId, err := self.metaData.InstanceID()
 	if err != nil {
 		return "", err
 	}
+
+	glog.V(3).Infof("QCloud Plugin InstanceID instanceId %s", instanceId)
 
 	zone, err := self.GetZone(ctx)
 	if err != nil {
@@ -179,6 +184,9 @@ func (self *QCloud) InstanceID(ctx context.Context, name types.NodeName) (string
 
 //只在Master中调用
 func (self *QCloud) NodeAddressesByProviderID(ctx context.Context, providerID string) ([]v1.NodeAddress, error) {
+
+	glog.Infof("QCloud Plugin NodeAddressesByProviderID  %s", providerID)
+
 	instanceId, err := kubernetesInstanceID(providerID).mapToInstanceID()
 	if err != nil {
 		return nil, err
@@ -199,6 +207,8 @@ func (self *QCloud) NodeAddressesByProviderID(ctx context.Context, providerID st
 			Type: v1.NodeExternalIP, Address: publicIp,
 		})
 	}
+
+	glog.Infof("QCloud Plugin NodeAddressesByProviderID addresses %v", addresses)
 
 	return addresses, nil
 }
