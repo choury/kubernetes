@@ -20,13 +20,17 @@ import (
 	"time"
 
 	"k8s.io/api/core/v1"
+	resourceapi "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	clientset "k8s.io/client-go/kubernetes"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/record"
+	resourcev1 "k8s.io/kubernetes/pkg/api/v1/resource"
+	api "k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
@@ -470,4 +474,100 @@ func (sched *Scheduler) scheduleOne() {
 			glog.Errorf("Internal error binding pod: (%v)", err)
 		}
 	}()
+}
+
+// NodeResourceInfos using test
+type NodeResourceInfos struct {
+	AllocatableCPU int64
+	AllocatableMEM int64
+	ReqCPU int64
+	ReqMEM int64
+	LimitsCPU int64
+	LimitsMEM int64
+}
+
+func (sched *Scheduler) GetNodeResourceInfos(inClient clientset.Interface)(map[string]*NodeResourceInfos, error){
+	nodeResourceInfos := make(map[string]*NodeResourceInfos)
+	nodeList, err := inClient.CoreV1().Nodes().List(metav1.ListOptions{})
+	if err != nil{
+		return nodeResourceInfos, err
+	}
+
+	for _, node := range nodeList.Items {
+		res, err := sched.DescribeResource("", node.Name, inClient)
+		if err != nil {
+			glog.Warningf("Get node resource infos failed, err: %v", err)
+			continue
+		}
+		nodeResourceInfos[node.Name] = res
+	}
+
+	return nodeResourceInfos, err
+}
+
+func (sched *Scheduler) DescribeResource(namespace, name string, inClient clientset.Interface) (*NodeResourceInfos, error) {
+	d := inClient
+	mc := d.CoreV1().Nodes()
+	node, err := mc.Get(name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	fieldSelector, err := fields.ParseSelector("spec.nodeName=" + name + ",status.phase!=" + string(api.PodSucceeded) + ",status.phase!=" + string(api.PodFailed))
+	if err != nil {
+		return nil, err
+	}
+	nodeNonTerminatedPodsList, err := d.CoreV1().Pods(namespace).List(metav1.ListOptions{FieldSelector: fieldSelector.String()})
+	if err != nil {
+		return nil, err
+	}
+	allocatable := node.Status.Capacity
+	if len(node.Status.Allocatable) > 0 {
+		allocatable = node.Status.Allocatable
+	}
+
+	reqs, limits, err := getPodsTotalRequestsAndLimits(nodeNonTerminatedPodsList)
+	if err != nil {
+		return nil, err
+	}
+
+	cpuReqs, upcLimits := reqs[v1.ResourceCPU], limits[v1.ResourceCPU]
+	memoryReqs, memLimits := reqs[v1.ResourceMemory], limits[v1.ResourceMemory]
+
+	return &NodeResourceInfos{
+		AllocatableCPU: allocatable.Cpu().MilliValue(),
+		AllocatableMEM: allocatable.Memory().Value(),
+		ReqCPU: cpuReqs.MilliValue(),
+		ReqMEM: memoryReqs.Value(),
+		LimitsCPU: upcLimits.MilliValue(),
+		LimitsMEM: memLimits.Value(),
+	}, err
+}
+
+func getPodsTotalRequestsAndLimits(podList *v1.PodList) (reqs map[v1.ResourceName]resourceapi.Quantity,
+	limits map[v1.ResourceName]resourceapi.Quantity, err error) {
+
+	reqs = make(map[v1.ResourceName] resourceapi.Quantity)
+	limits = make(map[v1.ResourceName] resourceapi.Quantity)
+
+	for _, pod := range podList.Items {
+		podReqs, podLimits := resourcev1.PodRequestsAndLimits(&pod)
+		for podReqName, podReqValue := range podReqs {
+			if value, ok := reqs[podReqName]; !ok {
+				reqs[podReqName] = *podReqValue.Copy()
+			} else {
+				value.Add(podReqValue)
+				reqs[podReqName] = value
+			}
+		}
+
+		for podLimitName, podLimitValue := range podLimits {
+			if value, ok := limits[podLimitName]; !ok {
+				limits[podLimitName] = *podLimitValue.Copy()
+			} else {
+				value.Add(podLimitValue)
+				limits[podLimitName] = value
+			}
+		}
+	}
+	return
 }

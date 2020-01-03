@@ -128,6 +128,12 @@ type Cache interface {
 
 	// NodeTree returns a node tree structure
 	NodeTree() *NodeTree
+
+	//Get scheduler cache node infos
+	GetCachedNodeInfos(hostname string) map[string]NodeInfoOut
+
+	//Get scheduler cache node resource infos
+	GetCachedResourceInfos() interface{}
 }
 
 // Snapshot is a snapshot of cache state

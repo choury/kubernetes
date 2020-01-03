@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/kubernetes/pkg/features"
+	"k8s.io/kubernetes/pkg/scheduler/util"
 
 	"github.com/golang/glog"
 	policy "k8s.io/api/policy/v1beta1"
@@ -109,6 +110,92 @@ func newSchedulerCache(ttl, period time.Duration, stop <-chan struct{}) *schedul
 		pdbs:        make(map[string]*policy.PodDisruptionBudget),
 		imageStates: make(map[string]*imageState),
 	}
+}
+
+type NodeInfoOut struct {
+	// Overall node information.
+	Node *v1.Node
+
+	Pods             []*v1.Pod
+	PodsWithAffinity []*v1.Pod
+	UsedPorts        util.HostPortInfo
+
+	// Total requested resource of all pods on this node.
+	// It includes assumed pods which scheduler sends binding to apiserver but
+	// didn't get it as scheduled yet.
+	RequestedResource *Resource
+	NonzeroRequest    *Resource
+	// We store allocatedResources (which is Node.Status.Allocatable.*) explicitly
+	// as int64, to avoid conversions and accessing map.
+	AllocatableResource *Resource
+
+	// Cached taints of the node for faster lookup.
+	Taints    []v1.Taint
+	TaintsErr error
+
+	// imageStates holds the entry of an image if and only if this image is on the node. The entry can be used for
+	// checking an image's existence and advanced usage (e.g., image locality scheduling policy) based on the image
+	// state information.
+	ImageStates map[string]*ImageStateSummary
+
+	// TransientInfo holds the information pertaining to a scheduling cycle. This will be destructed at the end of
+	// scheduling cycle.
+	// TODO: @ravig. Remove this once we have a clear approach for message passing across predicates and priorities.
+	TransientInfo *transientSchedulerInfo
+
+	// Cached conditions of node for faster lookup.
+	MemoryPressureCondition v1.ConditionStatus
+	DiskPressureCondition   v1.ConditionStatus
+	PidPressureCondition    v1.ConditionStatus
+
+	// Whenever NodeInfo changes, generation is bumped.
+	// This is used to avoid cloning it if the object didn't change.
+	Generation int64
+}
+
+func (cache *schedulerCache) GetCachedNodeInfos(hostname string) map[string]NodeInfoOut {
+	nodeInfos := make(map[string]NodeInfoOut)
+	for hostNome, nodeInfo := range cache.nodes {
+		if hostNome == hostname {
+			nodeInfos[hostNome] = NodeInfoOut{
+				Node:                    nodeInfo.node,
+				Pods:                    nodeInfo.pods,
+				PodsWithAffinity:        nodeInfo.podsWithAffinity,
+				RequestedResource:       nodeInfo.requestedResource,
+				NonzeroRequest:          nodeInfo.nonzeroRequest,
+				AllocatableResource:     nodeInfo.allocatableResource,
+				Taints:                  nodeInfo.taints,
+				TaintsErr:               nodeInfo.taintsErr,
+				ImageStates:             nodeInfo.imageStates,
+				TransientInfo:           nodeInfo.TransientInfo,
+				MemoryPressureCondition: nodeInfo.memoryPressureCondition,
+				DiskPressureCondition:   nodeInfo.diskPressureCondition,
+				PidPressureCondition:    nodeInfo.pidPressureCondition,
+				Generation:              nodeInfo.generation,
+			}
+			return nodeInfos
+		}
+	}
+
+	return nodeInfos
+}
+
+func (cache *schedulerCache) GetCachedResourceInfos()interface{} {
+	type NodesResourceInfo struct {
+		RequestedResource *Resource
+		NonzeroRequest    *Resource
+		AllocatableResource *Resource
+	}
+
+	nodesResourceInfo := make(map[string]*NodesResourceInfo)
+	for hostNome, nodeInfo := range cache.nodes {
+		nodesResourceInfo[hostNome] = &NodesResourceInfo{
+			RequestedResource:       nodeInfo.requestedResource,
+			NonzeroRequest:          nodeInfo.nonzeroRequest,
+			AllocatableResource:     nodeInfo.allocatableResource,
+		}
+	}
+	return nodesResourceInfo
 }
 
 // Snapshot takes a snapshot of the current schedulerCache. The method has performance impact,
