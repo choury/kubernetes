@@ -27,7 +27,7 @@ import (
 
 	"github.com/golang/glog"
 
-	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/core/v1"
 	"k8s.io/api/policy/v1beta1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -1459,8 +1459,9 @@ func (c *configFactory) MakeDefaultErrorFunc(backoff *util.PodBackoff, podQueue 
 		if err == core.ErrNoNodesAvailable {
 			glog.V(4).Infof("Unable to schedule %v/%v: no nodes are registered to the cluster; waiting", pod.Namespace, pod.Name)
 		} else {
-			if _, ok := err.(*core.FitError); ok {
-				glog.V(4).Infof("Unable to schedule %v/%v: no fit: %v; waiting", pod.Namespace, pod.Name, err)
+			if fitError, ok := err.(*core.FitError); ok {
+				//glog.V(4).Infof("Unable to schedule %v/%v: no fit: %v; waiting", pod.Namespace, pod.Name, err)
+				glog.V(4).Infof("Unable to schedule %v/%v: no fit: %s; waiting", pod.Namespace, pod.Name, fitError.ErrorMore())
 			} else if errors.IsNotFound(err) {
 				if errStatus, ok := err.(errors.APIStatus); ok && errStatus.Status().Details.Kind == "node" {
 					nodeName := errStatus.Status().Details.Name
