@@ -18,7 +18,7 @@ package qcloud_cbs
 
 import (
 	"errors"
-	"fmt"
+	"os"
 	"time"
 
 	qcloud "cloud.tencent.com/tencent-cloudprovider/provider"
@@ -26,7 +26,6 @@ import (
 	"k8s.io/cloud-provider"
 	"k8s.io/klog"
 	//"k8s.io/kubernetes/pkg/volume"
-	"k8s.io/kubernetes/pkg/util/mount"
 )
 
 const (
@@ -40,14 +39,25 @@ var ErrProbeVolume = errors.New("Error scanning attached volumes")
 
 type QcloudCbsUtil struct{}
 
-func verifyDevicePath(path string) (string, error) {
-	if pathExists, err := mount.PathExists(path); err != nil {
-		return "", fmt.Errorf("Error checking if path exists: %v", err)
-	} else if pathExists {
-		return path, nil
+func verifyDevicePath(devicePath, diskId string) (string, error) {
+	devicePathExist, err := pathExist(devicePath)
+	if err != nil {
+		return "", err
 	}
 
-	return "", nil
+	if !devicePathExist {
+		devicePathFromSerial, err := getDevicePathsBySerial(diskId)
+		if err != nil {
+			return "", err
+		}
+
+		if err := os.Symlink(devicePathFromSerial, devicePath); err != nil {
+			klog.Errorf("Failed to link devicePathFromSerial(%s) and devicePathFromKubelet(%s): %v", devicePathFromSerial, devicePath, err)
+			return "", err
+		}
+	}
+
+	return devicePath, nil
 }
 
 //// CreateVolume creates a qcloud volume.
