@@ -28,7 +28,7 @@ import (
 
 	"github.com/golang/glog"
 
-	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -91,6 +91,45 @@ func (f *FitError) Error() string {
 	}
 	reasonMsg := fmt.Sprintf(NoNodeAvailableMsg+": %v.", f.NumAllNodes, strings.Join(sortReasonsHistogram(), ", "))
 	return reasonMsg
+}
+
+// ErrorMore returns more detailed information of why the pod failed to fit on each node
+func (f *FitError) ErrorMore() string {
+	reasons := make(map[string]int)
+	node2Reasons := make(map[string][]string)
+	for nodeName, preds := range f.FailedPredicates {
+		for _, pred := range preds {
+			if pred.GetReason() == "" {
+				continue
+			}
+			simpleAndDetail := strings.Split(pred.GetReason(), predicates.ReasonSplitSymbol)
+			simpleReason := simpleAndDetail[0]
+			reasons[simpleReason]++
+			detailReason := ""
+			if len(simpleAndDetail) == 2 {
+				detailReason = simpleAndDetail[1]
+			}
+			if detailReason != "" {
+				node2Reasons[nodeName] = append(node2Reasons[nodeName], detailReason)
+			} else {
+				node2Reasons[nodeName] = append(node2Reasons[nodeName], simpleReason)
+			}
+		}
+	}
+	sortReasonsHistogram := func() []string {
+		reasonStrings := []string{}
+		for k, v := range reasons {
+			reasonStrings = append(reasonStrings, fmt.Sprintf("%v %v", v, k))
+		}
+		sort.Strings(reasonStrings)
+		return reasonStrings
+	}
+	reasonMsg := fmt.Sprintf(NoNodeAvailableMsg+": %v.", f.NumAllNodes, strings.Join(sortReasonsHistogram(), ", "))
+	reasonDet := ""
+	for nodeName, reasons := range node2Reasons {
+		reasonDet += fmt.Sprintf("\n%15s: %s", nodeName, strings.Join(reasons, ", "))
+	}
+	return reasonMsg + reasonDet
 }
 
 type genericScheduler struct {

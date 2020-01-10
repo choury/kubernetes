@@ -207,7 +207,12 @@ func (sched *Scheduler) schedule(pod *v1.Pod) (string, error) {
 	if err != nil {
 		pod = pod.DeepCopy()
 		sched.config.Error(pod, err)
-		sched.config.Recorder.Eventf(pod, v1.EventTypeWarning, "FailedScheduling", "%v", err)
+		//sched.config.Recorder.Eventf(pod, v1.EventTypeWarning, "FailedScheduling", "%v", err)
+		if fitError, ok := err.(*core.FitError); ok {
+			sched.config.Recorder.Eventf(pod, v1.EventTypeWarning, "FailedScheduling", "%s", fitError.ErrorMore())
+		} else {
+			sched.config.Recorder.Eventf(pod, v1.EventTypeWarning, "FailedScheduling", "%v", err)
+		}
 		sched.config.PodConditionUpdater.Update(pod, &v1.PodCondition{
 			Type:    v1.PodScheduled,
 			Status:  v1.ConditionFalse,
@@ -481,16 +486,16 @@ func (sched *Scheduler) scheduleOne() {
 type NodeResourceInfos struct {
 	AllocatableCPU int64
 	AllocatableMEM int64
-	ReqCPU int64
-	ReqMEM int64
-	LimitsCPU int64
-	LimitsMEM int64
+	ReqCPU         int64
+	ReqMEM         int64
+	LimitsCPU      int64
+	LimitsMEM      int64
 }
 
-func (sched *Scheduler) GetNodeResourceInfos(inClient clientset.Interface)(map[string]*NodeResourceInfos, error){
+func (sched *Scheduler) GetNodeResourceInfos(inClient clientset.Interface) (map[string]*NodeResourceInfos, error) {
 	nodeResourceInfos := make(map[string]*NodeResourceInfos)
 	nodeList, err := inClient.CoreV1().Nodes().List(metav1.ListOptions{})
-	if err != nil{
+	if err != nil {
 		return nodeResourceInfos, err
 	}
 
@@ -537,10 +542,10 @@ func (sched *Scheduler) DescribeResource(namespace, name string, inClient client
 	return &NodeResourceInfos{
 		AllocatableCPU: allocatable.Cpu().MilliValue(),
 		AllocatableMEM: allocatable.Memory().Value(),
-		ReqCPU: cpuReqs.MilliValue(),
-		ReqMEM: memoryReqs.Value(),
-		LimitsCPU: upcLimits.MilliValue(),
-		LimitsMEM: memLimits.Value(),
+		ReqCPU:         cpuReqs.MilliValue(),
+		ReqMEM:         memoryReqs.Value(),
+		LimitsCPU:      upcLimits.MilliValue(),
+		LimitsMEM:      memLimits.Value(),
 	}, err
 }
 

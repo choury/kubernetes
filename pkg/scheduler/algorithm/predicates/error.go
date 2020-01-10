@@ -82,6 +82,8 @@ var (
 	ErrFakePredicate = newPredicateFailureError("FakePredicateError", "Nodes failed the fake predicate")
 )
 
+const ReasonSplitSymbol string = "####"
+
 // InsufficientResourceError is an error type that indicates what kind of resource limit is
 // hit and caused the unfitting failure.
 type InsufficientResourceError struct {
@@ -107,9 +109,21 @@ func (e *InsufficientResourceError) Error() string {
 		e.ResourceName, e.requested, e.used, e.capacity)
 }
 
+/*
 // GetReason returns the reason of the InsufficientResourceError.
 func (e *InsufficientResourceError) GetReason() string {
 	return fmt.Sprintf("Insufficient %v", e.ResourceName)
+}
+*/
+
+// GetReason returns the reason of the InsufficientResourceError.
+func (e *InsufficientResourceError) GetSimpleReason() string {
+	return fmt.Sprintf("Insufficient %v", e.ResourceName)
+}
+
+// GetReason returns the reason of the InsufficientResourceError.
+func (e *InsufficientResourceError) GetReason() string {
+	return e.GetSimpleReason() + ReasonSplitSymbol + e.Error()
 }
 
 // GetInsufficientAmount returns the amount of the insufficient resource of the error.
