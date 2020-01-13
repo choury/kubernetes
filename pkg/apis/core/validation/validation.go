@@ -3791,7 +3791,7 @@ func ValidateService(service *core.Service) field.ErrorList {
 				includeProtocols.Insert(string(service.Spec.Ports[i].Protocol))
 			}
 		}
-		if includeProtocols.Len() > 1 {
+		if includeProtocols.Len() > 1 && !validateTencentCLB(service) {
 			allErrs = append(allErrs, field.Invalid(portsPath, service.Spec.Ports, "cannot create an external load balancer with mix protocols"))
 		}
 	}
@@ -3862,6 +3862,13 @@ func ValidateService(service *core.Service) field.ErrorList {
 	allErrs = append(allErrs, validateServiceExternalTrafficFieldsValue(service)...)
 
 	return allErrs
+}
+
+//Tencent cloud clb support mixed protocols in one loadBalancer service.
+//Determine whether it is clb through annotation, and this isn't last solution.
+func validateTencentCLB(service *core.Service) bool {
+	_, isCLB := service.Annotations["service.kubernetes.io/loadbalance-id"]
+	return isCLB
 }
 
 func validateServicePort(sp *core.ServicePort, requireName, isHeadlessService bool, allNames *sets.String, fldPath *field.Path) field.ErrorList {
