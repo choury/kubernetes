@@ -18,6 +18,7 @@ package scheduler
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 	"time"
 
@@ -47,6 +48,8 @@ import (
 
 	"github.com/golang/glog"
 )
+
+const ENABLE_EVENT_DETAIL = "ENABLE_EVENT_DETAIL"
 
 // Binder knows how to write a binding.
 type Binder interface {
@@ -208,7 +211,7 @@ func (sched *Scheduler) schedule(pod *v1.Pod) (string, error) {
 		pod = pod.DeepCopy()
 		sched.config.Error(pod, err)
 		//sched.config.Recorder.Eventf(pod, v1.EventTypeWarning, "FailedScheduling", "%v", err)
-		if fitError, ok := err.(*core.FitError); ok {
+		if fitError, ok := err.(*core.FitError); ok && os.Getenv(ENABLE_EVENT_DETAIL) == "1" {
 			sched.config.Recorder.Eventf(pod, v1.EventTypeWarning, "FailedScheduling", "%s", fitError.ErrorMore())
 		} else {
 			sched.config.Recorder.Eventf(pod, v1.EventTypeWarning, "FailedScheduling", "%v", err)
