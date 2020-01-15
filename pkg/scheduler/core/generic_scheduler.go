@@ -72,12 +72,37 @@ const (
 	NoNodeAvailableMsg = "0/%v nodes are available"
 )
 
+/*
 // Error returns detailed information of why the pod failed to fit on each node
 func (f *FitError) Error() string {
 	reasons := make(map[string]int)
 	for _, predicates := range f.FailedPredicates {
 		for _, pred := range predicates {
 			reasons[pred.GetReason()]++
+		}
+	}
+
+	sortReasonsHistogram := func() []string {
+		reasonStrings := []string{}
+		for k, v := range reasons {
+			reasonStrings = append(reasonStrings, fmt.Sprintf("%v %v", v, k))
+		}
+		sort.Strings(reasonStrings)
+		return reasonStrings
+	}
+	reasonMsg := fmt.Sprintf(NoNodeAvailableMsg+": %v.", f.NumAllNodes, strings.Join(sortReasonsHistogram(), ", "))
+	return reasonMsg
+}
+*/
+
+// Error returns detailed information of why the pod failed to fit on each node
+func (f *FitError) Error() string {
+	reasons := make(map[string]int)
+	for _, preds := range f.FailedPredicates {
+		for _, pred := range preds {
+			simpleAndDetail := strings.Split(pred.GetReason(), predicates.ReasonSplitSymbol)
+			simpleReason := simpleAndDetail[0]
+			reasons[simpleReason]++
 		}
 	}
 
