@@ -27,6 +27,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+const (
+	errorVolumeNotFound = "InvalidVolume.DisksNotFound"
+)
+
 var (
 	StorageTypeCloudBasic   = "CLOUD_BASIC"
 	StorageTypeCloudPremium = "CLOUD_PREMIUM"
@@ -39,6 +43,21 @@ var (
 
 )
 
+type ErrVolumeNotFound struct {
+	diskIds []string
+}
+
+func (e ErrVolumeNotFound) Code() string {
+	return errorVolumeNotFound
+}
+
+func (e ErrVolumeNotFound) Error() string {
+	return fmt.Sprintf("disks %v not found", e.diskIds)
+}
+
+func (e ErrVolumeNotFound) OrignalErr() error {
+	return nil
+}
 
 type DisksV3 interface {
 	// AttachDisk attaches given disk to given node. Current node
@@ -48,7 +67,7 @@ type DisksV3 interface {
 	// DetachDisk detaches given disk to given node. Current node
 	// is used when nodeName is empty string.
 	// Assumption: If node doesn't exist, disk is already detached from node.
-	DetachDiskV3(diskId string) error
+	DetachDiskV3(diskId string, nodename types.NodeName) error
 
 	// DiskIsAttached checks if a disk is attached to the given node.
 	// Assumption: If node doesn't exist, disk is not attached to the node.
@@ -66,7 +85,6 @@ type DisksV3 interface {
 
 	BindDiskToAspV3(diskId string, aspId string) error
 }
-
 
 func (qcloud *QCloud) CreateDiskV3(diskType string, sizeGb int, zone string, paymode string) (string, int, error) {
 	klog.Infof("CreateDisk, diskType:%s, size:%d, zone:%s",
@@ -192,7 +210,7 @@ func (qcloud *QCloud) AttachDiskV3(diskId string, nodename types.NodeName) error
 	}
 
 	if len(listCbsResponse.Response.DiskSet) <= 0 {
-		return fmt.Errorf("disk not found")
+		return ErrVolumeNotFound{diskIds: []string{diskId}}
 	}
 
 	for _, disk := range listCbsResponse.Response.DiskSet {
@@ -246,26 +264,24 @@ func (qcloud *QCloud) AttachDiskV3(diskId string, nodename types.NodeName) error
 	}
 }
 
-func (qcloud *QCloud) DetachDiskV3(diskId string) error {
-
-	listCbsRequest := cbsv3.NewDescribeDisksRequest()
-	listCbsRequest.DiskIds = cbscommon.StringPtrs([]string{diskId})
-
-	listCbsResponse, err := qcloud.cbsV3.DescribeDisks(listCbsRequest)
+func (qcloud *QCloud) DetachDiskV3(diskId string, hostName types.NodeName) error {
+	attached, err := qcloud.DiskIsAttachedV3(diskId, hostName)
 	if err != nil {
+		if isQcloudErrorVolumeNotFound(err) {
+			klog.Warningf(
+				"DetachDisk %s is called for node %s, but cbs disk does not exist; assuming the disk is detached",
+				diskId, hostName)
+
+			return nil
+		}
+
 		return err
 	}
 
-	if len(listCbsResponse.Response.DiskSet) <= 0 {
-		return fmt.Errorf("disk %v not found", diskId)
-	}
-
-	for _, disk := range listCbsResponse.Response.DiskSet {
-		if *disk.DiskId == diskId {
-			if *disk.DiskState == StatusUnattached {
-				return nil
-			}
-		}
+	if !attached {
+		// Volume is not attached to node. Success!
+		klog.Infof("Detach operation is successful. cbs disk(%s) was not attached to node(%s)", diskId, hostName)
+		return nil
 	}
 
 	detachDiskRequest := cbsv3.NewDetachDisksRequest()
@@ -334,7 +350,7 @@ func (qcloud *QCloud) DiskIsAttachedV3(diskId string, nodename types.NodeName) (
 	}
 
 	if len(listCbsResponse.Response.DiskSet) <= 0 {
-		return false, fmt.Errorf("disk %v not found", diskId)
+		return false, ErrVolumeNotFound{diskIds: []string{diskId}}
 	}
 
 	for _, disk := range listCbsResponse.Response.DiskSet {
@@ -376,7 +392,7 @@ func (qcloud *QCloud) DisksAreAttachedV3(diskIds []string, nodename types.NodeNa
 	}
 
 	if len(listCbsResponse.Response.DiskSet) <= 0 {
-		return nil, fmt.Errorf("disk %v not found", diskIds)
+		return nil, ErrVolumeNotFound{diskIds: diskIds}
 	}
 
 	for _, disk := range listCbsResponse.Response.DiskSet {
@@ -403,4 +419,15 @@ func (qcloud *QCloud) BindDiskToAspV3(diskId string, aspId string) error {
 
 	_, err := qcloud.cbsV3.BindAutoSnapshotPolicy(bindAspRequest)
 	return err
+}
+
+func isQcloudErrorVolumeNotFound(err error) bool {
+	if err != nil {
+		if qcErr, ok := err.(QcloudError); ok {
+			if qcErr.Code() == errorVolumeNotFound {
+				return true
+			}
+		}
+	}
+	return false
 }
