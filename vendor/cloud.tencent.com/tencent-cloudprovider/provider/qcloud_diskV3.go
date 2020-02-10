@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"time"
 
-	"k8s.io/klog"
+	klog "github.com/golang/glog"
 	cbsv3 "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/cbs/v20170312"
 	cbscommon "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common"
 	"k8s.io/apimachinery/pkg/types"
