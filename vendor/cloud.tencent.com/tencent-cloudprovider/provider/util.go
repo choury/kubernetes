@@ -142,3 +142,12 @@ func stringIn(a string, list []string) bool {
 	}
 	return false
 }
+
+func stringInV3(a string, list []*string) bool {
+	for _, b := range list {
+		if *b == a {
+			return true
+		}
+	}
+	return false
+}
