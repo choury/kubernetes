@@ -75,11 +75,13 @@ func (attacher *qcloudCbsAttacher) Attach(spec *volume.Spec, hostname types.Node
 
 	attached, err := attacher.qcloudDisks.DiskIsAttachedV3(diskId, hostname)
 	if err != nil {
-		klog.Errorf("check cbs disk(%q) is attached to node(%q) error(%v), will continue and try attach anyway",
+		klog.Errorf("check cbs disk(%q) is attached to node(%q) error(%v)",
 			diskId, hostName, err)
+
+		return "", err
 	}
 
-	if err == nil && attached {
+	if attached {
 		klog.Infof("cbs(%q) is already attached to node(%q), attach return success.", diskId, hostName)
 	} else {
 		if err := attacher.qcloudDisks.AttachDiskV3(diskId, hostname); err != nil {
@@ -252,21 +254,7 @@ func (detacher *qcloudCbsDetacher) Detach(deviceMountPath string, hostname types
 	//TODO
 	diskId := path.Base(deviceMountPath)
 
-	attached, err := detacher.qcloudDisk.DiskIsAttachedV3(diskId, hostname)
-	if err != nil {
-		// Log error and continue with detach
-		klog.Errorf(
-			"Check cbs disk(%s) is attached to node(%s) error(%v). Will continue and try detach anyway.",
-			diskId, hostName, err)
-	}
-
-	if err == nil && !attached {
-		// Volume is not attached to node. Success!
-		klog.Infof("Detach operation is successful. cbs disk(%s) was not attached to node(%s)", diskId, hostName)
-		return nil
-	}
-
-	if err = detacher.qcloudDisk.DetachDiskV3(diskId); err != nil {
+	if err := detacher.qcloudDisk.DetachDiskV3(diskId, hostName); err != nil {
 		klog.Errorf("Error detaching cbs disk(%q) from node(%q): %v", diskId, hostName, err)
 		return err
 	}
